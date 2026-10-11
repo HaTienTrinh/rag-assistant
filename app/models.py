@@ -25,9 +25,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="user")  # admin | user
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Conversation(Base):
@@ -96,3 +101,23 @@ class UnansweredQuestion(Base):
     top_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class RefreshToken(Base):
+    """Bảng lưu trữ refresh token băm (SHA-256) hỗ trợ xoay vòng và thu hồi theo phiên."""
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    family_id: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    replaced_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="refresh_tokens")

@@ -5,7 +5,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str
     secret_key: str
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 15  # mặc định 15 phút theo Phase 2
+    refresh_token_expire_days: int = 14  # thời hạn sống của refresh token (ngày)
+    refresh_reuse_grace_seconds: int = 10  # thời gian ân hạn phát hiện dùng lại token (giây)
+    cookie_secure: bool = False  # bật True khi triển khai HTTPS
 
     upload_dir: str = "uploads"
     max_upload_mb: int = 20

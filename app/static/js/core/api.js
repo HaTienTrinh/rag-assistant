@@ -1,27 +1,42 @@
-import { getToken, logout } from "./auth.js";
+import { getAccessToken, refreshSession, logout } from "./auth.js";
+import { toast } from "../ui/toast.js";
 
 /**
- * Gọi API backend với token xác thực tự động
- * @param {string} path - Đường dẫn API (ví dụ: '/conversations')
- * @param {RequestInit} options - Tùy chọn fetch
+ * Gọi API backend với access token trong bộ nhớ, tự động refresh và gửi lại request nếu gặp 401
  */
 export async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
-  const token = getToken();
+  const token = getAccessToken();
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(path, { ...options, headers });
-  const data = await res.json().catch(() => null);
+  let res = await fetch(path, { ...options, headers });
 
-  // Nếu 401 thì hết hạn phiên đăng nhập -> đăng xuất
-  if (res.status === 401 && path !== "/auth/login") {
-    logout();
-    const msg = data && typeof data.detail === "string" ? data.detail : "Phiên đăng nhập đã hết hạn";
-    throw new Error(msg);
+  // Khi gặp 401 (trừ các endpoint đăng nhập/refresh): refresh đúng một lần rồi gửi lại request gốc đúng một lần
+  if (res.status === 401 && path !== "/auth/login" && path !== "/auth/refresh") {
+    try {
+      const newToken = await refreshSession();
+      const retryHeaders = { ...(options.headers || {}), Authorization: `Bearer ${newToken}` };
+      res = await fetch(path, { ...options, headers: retryHeaders });
+    } catch (refreshErr) {
+      if (refreshErr.status === 401) {
+        toast("Phiên đăng nhập đã hết hạn", "error");
+        logout();
+      }
+      throw refreshErr;
+    }
+
+    // Nếu sau khi gửi lại vẫn nhận 401 -> đăng xuất
+    if (res.status === 401) {
+      toast("Phiên đăng nhập đã hết hạn", "error");
+      logout();
+      throw new Error("Phiên đăng nhập đã hết hạn");
+    }
   }
+
+  const data = await res.json().catch(() => null);
 
   if (!res.ok) {
     let detail = "Yêu cầu không hợp lệ";
@@ -53,3 +68,4 @@ export function sendJSON(method, path, body) {
     body: JSON.stringify(body),
   });
 }
+

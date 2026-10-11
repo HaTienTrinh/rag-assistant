@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.auth import hash_password, require_admin
+from app.auth import hash_password, require_admin, revoke_all_user_tokens
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -136,7 +136,11 @@ def update_user(
     if "role" in fields and body.role is not None:
         user.role = body.role
     if "is_active" in fields and body.is_active is not None:
+        was_active = user.is_active
         user.is_active = body.is_active
+        if was_active and not body.is_active:
+            # Khóa tài khoản -> thu hồi toàn bộ phiên và tăng token_version
+            revoke_all_user_tokens(db, user)
     if "daily_limit" in fields:
         user.daily_limit = body.daily_limit  # null = dùng hạn mức mặc định
     db.commit()
@@ -153,6 +157,8 @@ def reset_password(
     _check_password_bytes(body.password)
     user = _get_user(db, user_id)
     user.password_hash = hash_password(body.password)
+    # Đặt lại mật khẩu -> thu hồi toàn bộ phiên và tăng token_version
+    revoke_all_user_tokens(db, user)
     db.commit()
     return {"ok": True}
 

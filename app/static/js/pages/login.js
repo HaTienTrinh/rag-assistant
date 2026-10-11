@@ -1,4 +1,4 @@
-import { redirectIfLoggedIn, setToken } from "../core/auth.js";
+import { redirectIfLoggedIn, setAccessToken } from "../core/auth.js";
 import { api } from "../core/api.js";
 import { $ } from "../ui/dom.js";
 
@@ -30,7 +30,7 @@ async function initLoginPage() {
         }),
       });
 
-      setToken(data.access_token);
+      setAccessToken(data.access_token, data.expires_in);
       window.location.href = "/";
     } catch (err) {
       errBox.textContent = err.message;

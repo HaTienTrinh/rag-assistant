@@ -5,6 +5,7 @@ from sqlalchemy.engine import Engine
 NEW_COLUMNS = {
     "users": [
         ("is_active", "TINYINT(1) NOT NULL DEFAULT 1"),
+        ("token_version", "INT NOT NULL DEFAULT 0"),
         ("daily_limit", "INT NULL"),
         ("last_login_at", "DATETIME NULL"),
     ],

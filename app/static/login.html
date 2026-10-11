@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng nhập - RAG Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Khung Đăng nhập (Centered Card) -->
+  <div id="login-view" class="login-wrap">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="brand-badge-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        </div>
+        <h1 class="login-title">RAG Assistant</h1>
+        <p class="login-subtitle">Hệ thống hỏi đáp thông minh trên tài liệu nội bộ</p>
+      </div>
+
+      <form id="login-form" class="login-form">
+        <div class="form-group">
+          <label for="email" class="form-label">Email tài khoản</label>
+          <input id="email" type="email" class="form-input" placeholder="ten@congty.com" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password" class="form-label">Mật khẩu</label>
+          <input id="password" type="password" class="form-input" placeholder="Nhập mật khẩu" required autocomplete="current-password">
+        </div>
+        <button id="login-submit-btn" type="submit" class="btn btn-primary btn-block">Đăng nhập</button>
+        <div id="login-error" class="error-banner" hidden></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/pages/login.js"></script>
+</body>
+</html>

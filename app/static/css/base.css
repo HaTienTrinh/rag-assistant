@@ -1,0 +1,95 @@
+:root {
+  /* Typography */
+  --font-family: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12.5px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-title: 24px;
+  --font-size-kpi: 30px;
+
+  /* Colors - Light Theme */
+  --bg: #F1F5F9;
+  --bg-subtle: #F8FAFC;
+  --sidebar-bg: #FFFFFF;
+  --card-bg: #FFFFFF;
+  --border: #E2E8F0;
+  --border-focus: #0F766E;
+
+  --text: #0F172A;
+  --text-muted: #475569;
+  --text-dim: #94A3B8;
+
+  /* Accent (Teal) */
+  --accent: #0F766E;
+  --accent-hover: #0D655E;
+  --accent-light: #E6F4F1;
+  --accent-border: #99F6E4;
+  --accent-text: #FFFFFF;
+
+  /* Semantic State Colors */
+  --warning-text: #B45309;
+  --warning-bg: #FEF3C7;
+  --warning-border: #FDE68A;
+
+  --error-text: #B42318;
+  --error-bg: #FEF3F2;
+  --error-border: #FECDCA;
+
+  --success-text: #067647;
+  --success-bg: #ECFDF3;
+  --success-border: #A6F4C5;
+
+  --pill-neutral-bg: #F2F4F7;
+  --pill-neutral-text: #344054;
+
+  /* Shadows & Radii */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-dialog: 0 20px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --sidebar-width: 264px;
+  --topbar-height: 56px;
+}
+
+/* Base reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Accessibility focus ring */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}

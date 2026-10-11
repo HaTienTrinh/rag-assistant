@@ -1,0 +1,854 @@
+/* ==========================================================================
+   RAG Assistant - Admin Views & Components
+   Professional Console & Dashboard Styling
+   ========================================================================== */
+
+/* Main admin view wrapper */
+.admin-layout {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background-color: var(--bg);
+}
+
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Page Header */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0 0 4px;
+  font-size: var(--font-size-title);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+}
+
+/* Card Container */
+.card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-xs);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+
+.card-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   7.2. Trang Tổng quan (Dashboard)
+   ========================================================================== */
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 4 KPI Cards */
+.kpi-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+}
+
+.kpi-value {
+  font-size: var(--font-size-kpi);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.kpi-value.kpi-warning {
+  color: var(--warning-text);
+}
+
+.kpi-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.kpi-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Khung Cần xử lý */
+.action-needed-card {
+  border-left: 4px solid var(--warning-text);
+}
+
+.action-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.action-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  gap: 12px;
+}
+
+.action-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.action-item-icon {
+  color: var(--warning-text);
+  display: flex;
+  align-items: center;
+}
+
+.action-item-icon.error {
+  color: var(--error-text);
+}
+
+.action-item-btn {
+  font-size: var(--font-size-xs);
+  padding: 4px 10px;
+}
+
+.action-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--success-text);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  padding: 4px 0;
+}
+
+/* Biểu đồ cột CSS Flex thuần */
+.chart-card {
+  padding: 20px;
+}
+
+.chart-bars-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 180px;
+  padding: 24px 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.chart-val {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 32px;
+  min-height: 2px;
+  background-color: var(--accent);
+  border-radius: 4px 4px 0 0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.chart-bar:hover {
+  background-color: var(--accent-hover);
+  filter: brightness(1.1);
+}
+
+.chart-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+/* Dashboard Two-Column Row */
+.dashboard-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Top documents citations */
+.citation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.citation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.citation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sm);
+}
+
+.citation-name {
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 75%;
+}
+
+.citation-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.citation-bar-track {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.citation-bar-fill {
+  height: 100%;
+  background-color: var(--accent);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+/* Token stats card */
+.tokens-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.token-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+.token-stat-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.token-stat-vals {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.token-stat-vals strong {
+  color: var(--text);
+}
+
+/* ==========================================================================
+   Bảng Dữ liệu Chung (Data Table)
+   ========================================================================== */
+.table-container {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--card-bg);
+  box-shadow: var(--shadow-xs);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: var(--font-size-base);
+}
+
+.data-table th {
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tr:hover td {
+  background-color: #FAFCFD;
+}
+
+.data-table tr.row-inactive td {
+  opacity: 0.55;
+}
+
+.col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actions-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ==========================================================================
+   7.3. Trang Người dùng (Users Table)
+   ========================================================================== */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-input-wrap {
+  position: relative;
+  min-width: 260px;
+  flex: 1;
+  max-width: 360px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.search-input {
+  padding-left: 36px;
+}
+
+.filter-tabs {
+  display: inline-flex;
+  background-color: #E2E8F0;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  gap: 2px;
+}
+
+.filter-tab {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-tab:hover {
+  color: var(--text);
+}
+
+.filter-tab.active {
+  background-color: #FFFFFF;
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+
+/* User cell */
+.user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-cell-email {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-self-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background-color: var(--accent-light);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.user-cell-last-login {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Progress bar inside table */
+.limit-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+}
+
+.limit-progress-track {
+  width: 100%;
+  height: 5px;
+  background-color: #E2E8F0;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.limit-progress-fill {
+  height: 100%;
+  background-color: var(--accent);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.limit-progress-fill.warning {
+  background-color: var(--warning-text);
+}
+
+.limit-input-inline {
+  width: 95px;
+  padding: 4px 6px;
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+}
+
+.limit-input-inline:focus {
+  background-color: #FFFFFF;
+  border-color: var(--accent);
+}
+
+/* ==========================================================================
+   7.4. Trang Tài liệu (Master - Detail Layout)
+   ========================================================================== */
+.doc-master-detail {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.doc-list-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-list-card {
+  padding: 0;
+  overflow: hidden;
+  max-height: calc(100vh - 180px);
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-list-header {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+  background-color: var(--bg-subtle);
+}
+
+.doc-list-scroll {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.doc-items-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-item-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-left: 3px solid transparent;
+}
+
+.doc-item-row:last-child {
+  border-bottom: none;
+}
+
+.doc-item-row:hover {
+  background-color: #FAFCFD;
+}
+
+.doc-item-row.active {
+  background-color: var(--accent-light);
+  border-left-color: var(--accent);
+}
+
+.doc-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.doc-item-filename {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Right Detail Column */
+.doc-detail-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-detail-empty {
+  text-align: center;
+  padding: 60px 24px;
+}
+
+.empty-icon {
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.empty-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.empty-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.doc-detail-card {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.doc-detail-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+
+.doc-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-title {
+  margin: 0 0 8px;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.doc-meta-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.doc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mobile-back-btn {
+  display: none;
+}
+
+/* Chunks section */
+.chunks-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chunks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chunks-range-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.chunks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chunk-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background-color: var(--bg-subtle);
+  border-left: 3px solid var(--accent);
+}
+
+.chunk-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.chunk-text {
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.chunks-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.pagination-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   7.5. Trang Chưa trả lời được (Unanswered Questions)
+   ========================================================================== */
+.question-text-cell {
+  font-weight: 500;
+  max-width: 440px;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.score-cell {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Empty state for data tables */
+.table-empty-row td {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Loading state */
+.loading-state {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Responsive Rules (<900px)
+   ========================================================================== */
+@media (max-width: 900px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+    height: 100vh;
+  }
+
+  .mobile-topbar {
+    display: flex;
+  }
+
+  /* Sidebar trượt từ trái (Drawer) */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-dialog);
+    z-index: 1000;
+  }
+
+  .sidebar.drawer-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 999;
+  }
+
+  .admin-layout {
+    padding: 16px;
+  }
+
+  .dashboard-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Document Master-Detail on mobile: 2-step navigation */
+  .doc-master-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-back-btn {
+    display: inline-flex;
+  }
+
+  /* Hide right column when in list mode on mobile */
+  .doc-master-detail.mobile-list-mode #doc-detail-col {
+    display: none;
+  }
+
+  /* Hide left column when in detail mode on mobile */
+  .doc-master-detail.mobile-detail-mode #doc-list-col {
+    display: none;
+  }
+}

@@ -8,12 +8,13 @@ from app.services.embeddings import embed_query
 
 
 def search_chunks(db: Session, query: str, top_k: int | None = None) -> list[dict]:
+    """Trả về các đoạn gần nhất (chưa lọc theo ngưỡng), chỉ trong tài liệu đang bật."""
     top_k = top_k or settings.top_k
 
     rows = db.execute(
         select(Chunk.content, Chunk.page, Chunk.embedding, Document.filename)
         .join(Document, Document.id == Chunk.document_id)
-        .where(Document.status == "done")
+        .where(Document.status == "done", Document.is_active.is_(True))
     ).all()
     if not rows:
         return []

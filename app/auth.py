@@ -18,7 +18,10 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except ValueError:  # ví dụ mật khẩu dài hơn 72 byte
+        return False
 
 
 def create_access_token(user_id: int) -> str:
@@ -47,6 +50,8 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None:
         raise credentials_error
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Tài khoản đã bị khóa")
     return user
 
 

@@ -1,7 +1,16 @@
 import hashlib
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -16,15 +25,31 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx"}
 
 
+class UpdateDocumentBody(BaseModel):
+    is_active: bool
+
+
 def _serialize(doc: Document, chunk_count: int | None = None) -> dict:
     return {
         "id": doc.id,
         "filename": doc.filename,
         "status": doc.status,
         "error": doc.error,
+        "is_active": doc.is_active,
         "chunks": chunk_count,
         "created_at": doc.created_at,
     }
+
+
+def _get_doc(db: Session, doc_id: int) -> Document:
+    doc = db.get(Document, doc_id)
+    if doc is None:
+        raise HTTPException(404, "Không tìm thấy tài liệu")
+    return doc
+
+
+def _chunk_count(db: Session, doc_id: int) -> int:
+    return db.scalar(select(func.count(Chunk.id)).where(Chunk.document_id == doc_id)) or 0
 
 
 @router.post("", status_code=202)
@@ -82,21 +107,76 @@ def list_documents(
 def get_document(
     doc_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)
 ):
-    doc = db.get(Document, doc_id)
-    if doc is None:
-        raise HTTPException(404, "Không tìm thấy tài liệu")
-    count = db.scalar(select(func.count(Chunk.id)).where(Chunk.document_id == doc_id))
-    return _serialize(doc, count)
+    doc = _get_doc(db, doc_id)
+    return _serialize(doc, _chunk_count(db, doc_id))
+
+
+@router.get("/{doc_id}/chunks")
+def list_chunks(
+    doc_id: int,
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Xem các đoạn đã tách (không trả về vector embedding)."""
+    doc = _get_doc(db, doc_id)
+    rows = db.execute(
+        select(Chunk.id, Chunk.page, Chunk.content)
+        .where(Chunk.document_id == doc_id)
+        .order_by(Chunk.id)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return {
+        "document": _serialize(doc),
+        "total": _chunk_count(db, doc_id),
+        "items": [{"id": r.id, "page": r.page, "content": r.content} for r in rows],
+    }
+
+
+@router.patch("/{doc_id}")
+def update_document(
+    doc_id: int,
+    body: UpdateDocumentBody,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    doc = _get_doc(db, doc_id)
+    doc.is_active = body.is_active
+    db.commit()
+    return _serialize(doc, _chunk_count(db, doc_id))
+
+
+@router.post("/{doc_id}/reprocess", status_code=202)
+def reprocess_document(
+    doc_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    doc = _get_doc(db, doc_id)
+    if doc.status in ("pending", "processing"):
+        raise HTTPException(409, "Tài liệu đang được xử lý")
+    if not stored_path(doc).exists():
+        raise HTTPException(
+            409, "File gốc không còn trên máy chủ, hãy xóa và tải lại tài liệu"
+        )
+
+    db.execute(delete(Chunk).where(Chunk.document_id == doc_id))
+    doc.status = "pending"
+    doc.error = None
+    db.commit()
+
+    background_tasks.add_task(process_document, doc_id)
+    return _serialize(doc, 0)
 
 
 @router.delete("/{doc_id}")
 def delete_document(
     doc_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)
 ):
-    doc = db.get(Document, doc_id)
-    if doc is None:
-        raise HTTPException(404, "Không tìm thấy tài liệu")
-
+    doc = _get_doc(db, doc_id)
     path = stored_path(doc)
     db.execute(delete(Chunk).where(Chunk.document_id == doc_id))
     db.delete(doc)

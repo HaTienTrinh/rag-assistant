@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trợ lý hỏi đáp tài liệu</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <div id="login-view" class="login-wrap">
+    <form id="login-form" class="login-card">
+      <h1>Trợ lý hỏi đáp tài liệu</h1>
+      <p class="muted">Đăng nhập bằng tài khoản được cấp</p>
+      <input id="email" type="email" placeholder="Email" required autocomplete="username">
+      <input id="password" type="password" placeholder="Mật khẩu" required autocomplete="current-password">
+      <button type="submit">Đăng nhập</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="app-view" class="layout" hidden>
+    <aside class="sidebar">
+      <button id="new-chat" class="primary">+ Hội thoại mới</button>
+      <ul id="conv-list"></ul>
+      <div class="user-box">
+        <div id="user-email" class="muted"></div>
+        <div class="user-actions">
+          <button id="chat-btn" class="link" hidden>Chat</button>
+          <button id="docs-btn" class="link" hidden>Tài liệu</button>
+          <button id="logout-btn" class="link">Đăng xuất</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="chat-view" class="chat">
+        <div id="messages" class="messages"></div>
+        <form id="chat-form" class="composer">
+          <textarea id="question" rows="1" placeholder="Nhập câu hỏi... (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+          <button id="send-btn" type="submit" class="primary">Gửi</button>
+        </form>
+      </section>
+
+      <section id="docs-view" class="docs" hidden>
+        <h2>Quản lý tài liệu</h2>
+        <form id="upload-form" class="upload">
+          <input id="file" type="file" accept=".pdf,.txt,.docx" required>
+          <button type="submit" class="primary">Tải lên</button>
+          <span id="upload-msg" class="muted"></span>
+        </form>
+        <table>
+          <thead><tr><th>Tên file</th><th>Trạng thái</th><th>Số đoạn</th><th></th></tr></thead>
+          <tbody id="docs-body"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js?v=2"></script>
+</body>
+</html>

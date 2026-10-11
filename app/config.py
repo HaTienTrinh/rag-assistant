@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 20
 
     # Embedding và tìm kiếm
-    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     chunk_words: int = 180
     chunk_overlap: int = 30
     top_k: int = 5
@@ -19,9 +19,14 @@ class Settings(BaseSettings):
     # LLM (DeepSeek)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
+    anthropic_api_key: str = ""
     llm_model: str = "deepseek-chat"
 
-    model_config = SettingsConfigDict(env_file=".env")
+    # Hội thoại
+    history_messages: int = 8
+    daily_question_limit: int = 50
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

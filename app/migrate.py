@@ -8,6 +8,7 @@ NEW_COLUMNS = {
         ("token_version", "INT NOT NULL DEFAULT 0"),
         ("daily_limit", "INT NULL"),
         ("last_login_at", "DATETIME NULL"),
+        ("deleted_at", "DATETIME NULL"),
     ],
     "documents": [("is_active", "TINYINT(1) NOT NULL DEFAULT 1")],
     "messages": [("prompt_tokens", "INT NULL"), ("completion_tokens", "INT NULL")],

@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -51,6 +51,21 @@ def _check_password_bytes(password: str) -> None:
 
 # ======================= Người dùng =======================
 
+def _is_last_active_admin(db: Session, target_user: User) -> bool:
+    """Kiểm tra target_user có phải là quản trị viên đang hoạt động duy nhất còn lại không."""
+    if target_user.role != "admin" or not target_user.is_active or target_user.deleted_at is not None:
+        return False
+    active_count = db.scalar(
+        select(func.count(User.id)).where(
+            User.role == "admin",
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+            User.id != target_user.id,
+        )
+    ) or 0
+    return active_count < 1
+
+
 def _question_counts(db: Session, only_today: bool) -> dict[int, int]:
     q = (
         select(Conversation.user_id, func.count(Message.id))
@@ -77,6 +92,7 @@ def _serialize_user(u: User, total: dict, today: dict) -> dict:
         "questions_total": total.get(u.id, 0),
         "last_login_at": u.last_login_at,
         "created_at": u.created_at,
+        "deleted_at": u.deleted_at,
     }
 
 
@@ -88,11 +104,38 @@ def _get_user(db: Session, user_id: int) -> User:
 
 
 @router.get("/users")
-def list_users(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def list_users(
+    view: str = Query("active", pattern="^(active|trash)$"),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Lấy danh sách người dùng theo chế độ view: active (mặc định) hoặc trash (thùng rác)."""
     total = _question_counts(db, only_today=False)
     today = _question_counts(db, only_today=True)
-    users = db.scalars(select(User).order_by(User.id)).all()
+    q = select(User).order_by(User.id)
+    if view == "active":
+        q = q.where(User.deleted_at.is_(None))
+    elif view == "trash":
+        q = q.where(User.deleted_at.is_not(None))
+    users = db.scalars(q).all()
     return [_serialize_user(u, total, today) for u in users]
+
+
+@router.get("/users/counts")
+def user_counts(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Trả về số lượng tài khoản theo từng nhóm: all, active, locked, trash."""
+    def count(*conds):
+        return db.scalar(select(func.count(User.id)).where(*conds)) or 0
+
+    return {
+        "all": count(User.deleted_at.is_(None)),
+        "active": count(User.deleted_at.is_(None), User.is_active.is_(True)),
+        "locked": count(User.deleted_at.is_(None), User.is_active.is_(False)),
+        "trash": count(User.deleted_at.is_not(None)),
+    }
 
 
 @router.post("/users", status_code=201)
@@ -103,7 +146,12 @@ def create_user(
 ):
     _check_password_bytes(body.password)
     email = body.email.strip()
-    if db.scalar(select(User).where(User.email == email)):
+    existing_user = db.scalar(select(User).where(User.email == email))
+    if existing_user:
+        if existing_user.deleted_at is not None:
+            raise HTTPException(
+                409, "Email thuộc một tài khoản trong thùng rác, hãy khôi phục hoặc xóa vĩnh viễn"
+            )
         raise HTTPException(409, "Email đã tồn tại")
     user = User(
         email=email,
@@ -132,6 +180,14 @@ def update_user(
             raise HTTPException(400, "Không thể tự khóa tài khoản của chính bạn")
         if "role" in fields and body.role not in (None, "admin"):
             raise HTTPException(400, "Không thể tự hạ quyền của chính bạn")
+
+    # Không được khóa hoặc hạ quyền admin hoạt động cuối cùng của hệ thống
+    will_deactivate = "is_active" in fields and body.is_active is False
+    will_demote = "role" in fields and body.role == "user"
+    if (will_deactivate or will_demote) and _is_last_active_admin(db, user):
+        raise HTTPException(
+            409, "Không thể khóa hoặc hạ quyền quản trị viên đang hoạt động cuối cùng của hệ thống"
+        )
 
     if "role" in fields and body.role is not None:
         user.role = body.role
@@ -164,15 +220,55 @@ def reset_password(
 
 
 @router.delete("/users/{user_id}")
-def delete_user(
+def trash_user(
     user_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)
 ):
+    """Chuyển tài khoản vào thùng rác (xóa mềm), thu hồi phiên và giữ nguyên dữ liệu hội thoại."""
+    user = _get_user(db, user_id)
+    if user.id == admin.id:
+        raise HTTPException(400, "Không thể tự chuyển tài khoản của chính bạn vào thùng rác")
+    if user.deleted_at is not None:
+        raise HTTPException(
+            409, "Tài khoản đã ở trong thùng rác. Sử dụng endpoint xóa vĩnh viễn để xóa hoàn toàn."
+        )
+    if _is_last_active_admin(db, user):
+        raise HTTPException(
+            409, "Không thể chuyển vào thùng rác quản trị viên đang hoạt động cuối cùng của hệ thống"
+        )
+
+    user.deleted_at = datetime.now(timezone.utc)
+    revoke_all_user_tokens(db, user)
+    db.commit()
+    return {"trashed": user_id, "message": "Đã chuyển tài khoản vào thùng rác"}
+
+
+@router.post("/users/{user_id}/restore")
+def restore_user(
+    user_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)
+):
+    """Khôi phục tài khoản từ thùng rác; trạng thái Khóa trước đó giữ nguyên."""
+    user = _get_user(db, user_id)
+    if user.deleted_at is None:
+        raise HTTPException(409, "Tài khoản không ở trong thùng rác")
+
+    user.deleted_at = None
+    db.commit()
+    return {"restored": user_id, "message": "Đã khôi phục tài khoản"}
+
+
+@router.delete("/users/{user_id}/permanent")
+def permanent_delete_user(
+    user_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)
+):
+    """Xóa vĩnh viễn tài khoản trong thùng rác cùng toàn bộ hội thoại và tin nhắn."""
     user = _get_user(db, user_id)
     if user.id == admin.id:
         raise HTTPException(400, "Không thể tự xóa tài khoản của chính bạn")
+    if user.deleted_at is None:
+        raise HTTPException(409, "Chỉ có thể xóa vĩnh viễn tài khoản đang ở trong thùng rác")
     if db.scalar(select(func.count(Document.id)).where(Document.uploaded_by == user.id)):
         raise HTTPException(
-            409, "Tài khoản này đã tải tài liệu lên. Hãy khóa tài khoản thay vì xóa."
+            409, "Tài khoản này đã tải tài liệu lên. Không thể xóa vĩnh viễn."
         )
 
     conv_ids = db.scalars(
@@ -183,7 +279,7 @@ def delete_user(
         db.execute(delete(Conversation).where(Conversation.id.in_(conv_ids)))
     db.delete(user)
     db.commit()
-    return {"deleted": user_id}
+    return {"deleted": user_id, "message": "Đã xóa vĩnh viễn tài khoản"}
 
 
 # ======================= Thống kê =======================
@@ -208,8 +304,9 @@ def stats(
         ).all()
     }
     totals = {
-        "users": count(User.id),
-        "users_active": count(User.id, User.is_active.is_(True)),
+        "users": count(User.id, User.deleted_at.is_(None)),
+        "users_active": count(User.id, User.is_active.is_(True), User.deleted_at.is_(None)),
+        "users_trashed": count(User.id, User.deleted_at.is_not(None)),
         "documents": sum(doc_status.values()),
         "documents_done": doc_status.get("done", 0),
         "chunks": count(Chunk.id),

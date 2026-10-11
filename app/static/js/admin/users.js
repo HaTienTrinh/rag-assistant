@@ -6,14 +6,29 @@ import { openCustomDialog, closeCustomDialog, showConfirmDialog } from "../ui/di
 
 let cachedUsers = [];
 let userSearchFilter = "";
-let userStatusFilter = "all";
+let userStatusFilter = "all"; // "all" | "active" | "locked" | "trash"
 let me = null;
 let targetUserForReset = null;
+let targetUserForPermanentDelete = null;
 
-/**
- * Tải danh sách người dùng và vẽ bảng
- * @param {Object} [currentUser] - Thông tin tài khoản admin đang đăng nhập
- */
+/** Tải số lượng tài khoản theo từng trạng thái và cập nhật lên các chip */
+async function loadUsersCounts() {
+  try {
+    const counts = await api("/admin/users/counts");
+    const setChip = (id, val) => {
+      const span = $(`#chip-count-${id}`);
+      if (span) span.textContent = `(${val})`;
+    };
+    setChip("all", counts.all);
+    setChip("active", counts.active);
+    setChip("locked", counts.locked);
+    setChip("trash", counts.trash);
+  } catch (err) {
+    console.warn("Không thể tải số đếm người dùng:", err);
+  }
+}
+
+/** Tải danh sách người dùng và vẽ bảng */
 export async function loadUsers(currentUser = null) {
   if (currentUser) {
     me = currentUser;
@@ -22,62 +37,155 @@ export async function loadUsers(currentUser = null) {
   const tbody = $("#users-tbody");
   if (!tbody) return;
 
+  renderTableHeader();
+  await loadUsersCounts();
+
   tbody.replaceChildren(
     el("tr", { class: "table-empty-row" },
-      el("td", { colspan: "6" }, "Đang tải danh sách người dùng…")
+      el("td", { colspan: userStatusFilter === "trash" ? "4" : "6" }, "Đang tải danh sách người dùng…")
     )
   );
 
   try {
-    cachedUsers = await api("/admin/users");
+    const viewParam = userStatusFilter === "trash" ? "trash" : "active";
+    cachedUsers = await api(`/admin/users?view=${viewParam}`);
     renderUsersTable();
   } catch (err) {
     toast(err.message, "error");
     tbody.replaceChildren(
       el("tr", { class: "table-empty-row" },
-        el("td", { colspan: "6" }, err.message)
+        el("td", { colspan: userStatusFilter === "trash" ? "4" : "6" }, err.message)
       )
     );
   }
 }
 
-/**
- * Lọc và hiển thị các dòng người dùng ra bảng
- */
+/** Vẽ tiêu đề bảng phù hợp theo chế độ thường hoặc thùng rác */
+function renderTableHeader() {
+  const thead = $("#users-thead");
+  if (!thead) return;
+
+  if (userStatusFilter === "trash") {
+    thead.replaceChildren(
+      el("tr", {},
+        el("th", {}, "Email"),
+        el("th", {}, "Vai trò"),
+        el("th", {}, "Ngày xóa"),
+        el("th", { class: "col-actions" }, "Thao tác")
+      )
+    );
+  } else {
+    thead.replaceChildren(
+      el("tr", {},
+        el("th", {}, "Email"),
+        el("th", {}, "Vai trò"),
+        el("th", {}, "Trạng thái"),
+        el("th", {}, "Hạn mức/ngày"),
+        el("th", {}, "Hôm nay / Tổng"),
+        el("th", { class: "col-actions" }, "Thao tác")
+      )
+    );
+  }
+}
+
+/** Lọc và hiển thị các dòng người dùng ra bảng */
 function renderUsersTable() {
   const tbody = $("#users-tbody");
   if (!tbody) return;
 
-  const activeCount = cachedUsers.filter((u) => u.is_active).length;
+  const colSpan = userStatusFilter === "trash" ? "4" : "6";
   const subtitle = $("#users-subtitle");
-  if (subtitle) {
-    subtitle.textContent = `${cachedUsers.length} tài khoản · ${activeCount} đang hoạt động`;
-  }
 
-  // Lọc ở client
+  // Lọc ở client theo ô tìm kiếm và trạng thái (nếu ở view active)
   const filtered = cachedUsers.filter((u) => {
     const matchSearch = !userSearchFilter || u.email.toLowerCase().includes(userSearchFilter.toLowerCase());
+    if (userStatusFilter === "trash") return matchSearch;
     const matchStatus = userStatusFilter === "all"
       || (userStatusFilter === "active" && u.is_active)
       || (userStatusFilter === "locked" && !u.is_active);
     return matchSearch && matchStatus;
   });
 
+  if (subtitle) {
+    if (userStatusFilter === "trash") {
+      subtitle.textContent = `${filtered.length} tài khoản trong thùng rác`;
+    } else {
+      const activeCount = cachedUsers.filter((u) => u.is_active).length;
+      subtitle.textContent = `${cachedUsers.length} tài khoản · ${activeCount} đang hoạt động`;
+    }
+  }
+
   if (filtered.length === 0) {
+    const emptyMsg = userStatusFilter === "trash"
+      ? "Thùng rác đang trống."
+      : "Không tìm thấy người dùng phù hợp.";
     tbody.replaceChildren(
-      el("tr", { class: "table-empty-row" },
-        el("td", { colspan: "6" }, "Không tìm thấy người dùng phù hợp.")
-      )
+      el("tr", { class: "table-empty-row" }, el("td", { colspan: colSpan }, emptyMsg))
     );
     return;
   }
 
-  tbody.replaceChildren(...filtered.map(createUserRow));
+  const rowBuilder = userStatusFilter === "trash" ? createTrashUserRow : createUserRow;
+  tbody.replaceChildren(...filtered.map(rowBuilder));
 }
 
-/**
- * Tạo một hàng table cho tài khoản người dùng
- */
+/** Tạo hàng table cho tài khoản trong thùng rác */
+function createTrashUserRow(u) {
+  const isSelf = me && u.id === me.id;
+
+  const restoreBtn = el("button", {
+    class: "btn btn-outline btn-sm",
+    title: "Khôi phục tài khoản",
+    onclick: () => {
+      showConfirmDialog({
+        title: "Khôi phục tài khoản",
+        message: `Khôi phục tài khoản ${u.email}? Tài khoản sẽ quay lại danh sách người dùng với trạng thái khóa/mở như trước.`,
+        okText: "Khôi phục",
+        onConfirm: async () => {
+          try {
+            await api(`/admin/users/${u.id}/restore`, { method: "POST" });
+            toast("Đã khôi phục tài khoản thành công", "success");
+            await loadUsers();
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        },
+      });
+    },
+  }, "Khôi phục");
+
+  const permDeleteBtn = el("button", {
+    class: "btn btn-danger-outline btn-sm",
+    disabled: isSelf,
+    title: "Xóa tài khoản vĩnh viễn",
+    onclick: () => openPermanentDeleteDialog(u),
+  }, "Xóa vĩnh viễn");
+
+  return el("tr", { class: "row-inactive" },
+    el("td", {},
+      el("div", { class: "user-cell" },
+        el("div", { class: "user-cell-email" },
+          u.email,
+          isSelf ? el("span", { class: "user-self-badge" }, "(bạn)") : false
+        ),
+        el("div", { class: "user-cell-last-login" },
+          `Đăng nhập gần nhất: ${fmtTime(u.last_login_at)}`
+        )
+      )
+    ),
+    el("td", {},
+      el("span", { class: "pill pill-neutral" }, u.role === "admin" ? "Quản trị viên" : "Người dùng")
+    ),
+    el("td", {},
+      el("span", { class: "kpi-note" }, fmtTime(u.deleted_at))
+    ),
+    el("td", { class: "col-actions" },
+      el("div", { class: "actions-wrap" }, restoreBtn, permDeleteBtn)
+    )
+  );
+}
+
+/** Tạo một hàng table cho tài khoản người dùng hoạt động bình thường */
 function createUserRow(u) {
   const isSelf = me && u.id === me.id;
 
@@ -111,7 +219,7 @@ function createUserRow(u) {
   if (u.role === "admin") {
     limitCellContent = el("span", { class: "kpi-note" }, "Không giới hạn");
   } else {
-    const limitInput = el("input", {
+    limitCellContent = el("input", {
       type: "number",
       min: "1",
       class: "limit-input-inline",
@@ -130,7 +238,6 @@ function createUserRow(u) {
         }
       },
     });
-    limitCellContent = limitInput;
   }
 
   // Hôm nay / Tổng câu hỏi kèm thanh tiến độ
@@ -150,7 +257,7 @@ function createUserRow(u) {
     questionsCell.append(bar);
   }
 
-  // Các nút thao tác
+  // Nút Khóa / Mở khóa
   const lockBtn = el("button", {
     class: "btn btn-outline btn-sm",
     disabled: isSelf,
@@ -166,28 +273,28 @@ function createUserRow(u) {
     },
   }, u.is_active ? "Khóa" : "Mở khóa");
 
+  // Nút Đặt lại mật khẩu
   const resetPwBtn = el("button", {
     class: "btn btn-outline btn-sm",
     title: "Đặt lại mật khẩu mới",
-    onclick: () => {
-      openResetPasswordDialog(u);
-    },
+    onclick: () => openResetPasswordDialog(u),
   }, "Đặt lại MK");
 
-  const deleteBtn = el("button", {
+  // Nút Chuyển vào thùng rác (xóa mềm lần 1)
+  const trashBtn = el("button", {
     class: "btn btn-danger-outline btn-sm",
     disabled: isSelf,
-    title: "Xóa tài khoản vĩnh viễn",
+    title: "Chuyển vào thùng rác",
     onclick: () => {
       showConfirmDialog({
-        title: "Xác nhận xóa tài khoản",
-        message: `Xóa tài khoản ${u.email} và toàn bộ hội thoại của họ? Hành động này không thể hoàn tác.`,
-        okText: "Xóa tài khoản",
+        title: "Chuyển vào thùng rác",
+        message: `Chuyển tài khoản ${u.email} vào thùng rác? Bạn có thể khôi phục tài khoản này bất cứ lúc nào.`,
+        okText: "Chuyển vào thùng rác",
         isDanger: true,
         onConfirm: async () => {
           try {
             await api(`/admin/users/${u.id}`, { method: "DELETE" });
-            toast("Đã xóa tài khoản", "success");
+            toast("Đã chuyển tài khoản vào thùng rác", "success");
             await loadUsers();
           } catch (err) {
             toast(err.message, "error");
@@ -195,7 +302,7 @@ function createUserRow(u) {
         },
       });
     },
-  }, "Xóa");
+  }, "Chuyển vào thùng rác");
 
   return el("tr", { class: u.is_active ? "" : "row-inactive" },
     el("td", {},
@@ -214,14 +321,12 @@ function createUserRow(u) {
     el("td", {}, limitCellContent),
     el("td", {}, questionsCell),
     el("td", { class: "col-actions" },
-      el("div", { class: "actions-wrap" }, lockBtn, resetPwBtn, deleteBtn)
+      el("div", { class: "actions-wrap" }, lockBtn, resetPwBtn, trashBtn)
     )
   );
 }
 
-/**
- * Mở modal đặt lại mật khẩu cho user
- */
+/** Mở modal đặt lại mật khẩu cho user */
 function openResetPasswordDialog(u) {
   targetUserForReset = u;
   const dialog = $("#reset-password-dialog");
@@ -233,9 +338,32 @@ function openResetPasswordDialog(u) {
   openCustomDialog(dialog);
 }
 
-/**
- * Gắn các sự kiện một lần cho trang Users (search, filters, modals)
- */
+/** Mở modal xác nhận mạnh xóa vĩnh viễn tài khoản trong thùng rác */
+function openPermanentDeleteDialog(u) {
+  targetUserForPermanentDelete = u;
+  const dialog = $("#permanent-delete-dialog");
+  const form = $("#permanent-delete-form");
+  const desc = $("#permanent-delete-desc");
+  const targetEmailStrong = $("#permanent-delete-target-email");
+  const confirmInput = $("#permanent-delete-confirm-input");
+  const submitBtn = $("#permanent-delete-submit-btn");
+
+  if (form) form.reset();
+  if (desc) desc.textContent = `Tài khoản ${u.email} cùng toàn bộ hội thoại và tin nhắn sẽ bị xóa hoàn toàn.`;
+  if (targetEmailStrong) targetEmailStrong.textContent = u.email;
+  if (submitBtn) submitBtn.disabled = true;
+
+  if (confirmInput) {
+    confirmInput.value = "";
+    confirmInput.oninput = () => {
+      if (submitBtn) submitBtn.disabled = confirmInput.value.trim() !== u.email;
+    };
+  }
+
+  openCustomDialog(dialog);
+}
+
+/** Gắn các sự kiện một lần cho trang Users (search, filters, modals) */
 export function initUsersEvents(currentUser) {
   me = currentUser;
 
@@ -253,11 +381,11 @@ export function initUsersEvents(currentUser) {
   $$("#tab-users .filter-tab").forEach((tab) => {
     if (!tab.dataset.initialized) {
       tab.dataset.initialized = "true";
-      tab.addEventListener("click", () => {
+      tab.addEventListener("click", async () => {
         $$("#tab-users .filter-tab").forEach((t) => t.classList.remove("active"));
         tab.classList.add("active");
         userStatusFilter = tab.dataset.filter;
-        renderUsersTable();
+        await loadUsers();
       });
     }
   });
@@ -316,4 +444,29 @@ export function initUsersEvents(currentUser) {
       }
     });
   }
+
+  // 5. Modal xóa vĩnh viễn tài khoản trong thùng rác
+  const permDeleteDialog = $("#permanent-delete-dialog");
+  const permDeleteForm = $("#permanent-delete-form");
+
+  if (permDeleteForm && !permDeleteForm.dataset.initialized) {
+    permDeleteForm.dataset.initialized = "true";
+    permDeleteForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!targetUserForPermanentDelete) return;
+      const submitBtn = $("#permanent-delete-submit-btn");
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        await api(`/admin/users/${targetUserForPermanentDelete.id}/permanent`, { method: "DELETE" });
+        closeCustomDialog(permDeleteDialog);
+        toast("Đã xóa vĩnh viễn tài khoản thành công", "success");
+        await loadUsers();
+      } catch (err) {
+        toast(err.message, "error");
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+  }
 }
+

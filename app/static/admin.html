@@ -81,15 +81,16 @@
             <input id="user-search-input" type="text" class="form-input search-input" placeholder="Tìm theo email tài khoản...">
           </div>
           <div class="filter-tabs" role="tablist" aria-label="Lọc trạng thái người dùng">
-            <button class="filter-tab active" data-filter="all">Tất cả</button>
-            <button class="filter-tab" data-filter="active">Hoạt động</button>
-            <button class="filter-tab" data-filter="locked">Đã khóa</button>
+            <button class="filter-tab active" data-filter="all">Tất cả <span id="chip-count-all" class="chip-count"></span></button>
+            <button class="filter-tab" data-filter="active">Hoạt động <span id="chip-count-active" class="chip-count"></span></button>
+            <button class="filter-tab" data-filter="locked">Đã khóa <span id="chip-count-locked" class="chip-count"></span></button>
+            <button class="filter-tab filter-tab-trash" data-filter="trash">Thùng rác <span id="chip-count-trash" class="chip-count"></span></button>
           </div>
         </div>
 
         <div class="table-container">
           <table class="data-table">
-            <thead>
+            <thead id="users-thead">
               <tr>
                 <th>Email</th>
                 <th>Vai trò</th>
@@ -353,6 +354,39 @@
         <div class="dialog-footer">
           <button type="button" class="btn btn-outline" data-close-dialog>Đóng</button>
           <button id="upload-submit-btn" type="submit" class="btn btn-primary">Bắt đầu tải lên</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Dialog 4: Xóa vĩnh viễn tài khoản (Xác nhận mạnh) -->
+  <dialog id="permanent-delete-dialog" class="custom-dialog">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <h3 class="dialog-title text-danger">Xóa tài khoản vĩnh viễn</h3>
+        <button type="button" class="icon-btn dialog-close-btn" data-close-dialog aria-label="Đóng hộp thoại">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form id="permanent-delete-form">
+        <div class="dialog-body">
+          <div class="alert-banner alert-danger">
+            <strong>Cảnh báo:</strong> Hành động này không thể hoàn tác. Toàn bộ hội thoại và tin nhắn của người dùng sẽ bị xóa vĩnh viễn khỏi cơ sở dữ liệu.
+          </div>
+          <p id="permanent-delete-desc" class="dialog-desc"></p>
+          <div class="form-group">
+            <label for="permanent-delete-confirm-input" class="form-label">
+              Nhập email xác nhận: <strong id="permanent-delete-target-email"></strong>
+            </label>
+            <input id="permanent-delete-confirm-input" type="text" class="form-input" placeholder="Gõ chính xác email để xác nhận" autocomplete="off" required>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button type="button" class="btn btn-outline" data-close-dialog>Hủy</button>
+          <button id="permanent-delete-submit-btn" type="submit" class="btn btn-danger" disabled>Xóa vĩnh viễn</button>
         </div>
       </form>
     </div>

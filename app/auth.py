@@ -90,7 +90,7 @@ def get_current_user(
         raise credentials_error
 
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or user.deleted_at is not None:
         raise credentials_error
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Tài khoản đã bị khóa")

@@ -31,9 +31,13 @@ def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """Đăng nhập bằng email và mật khẩu, trả về access token và cấp cookie refresh_token (HttpOnly)."""
     user = db.scalar(select(User).where(User.email == form.username))
-    if user is None or not verify_password(form.password, user.password_hash):
+    # Tài khoản không tồn tại, đã xóa mềm hoặc sai mật khẩu đều trả cùng lỗi 401 tránh lộ thông tin
+    if (
+        user is None
+        or user.deleted_at is not None
+        or not verify_password(form.password, user.password_hash)
+    ):
         raise HTTPException(status_code=401, detail="Sai email hoặc mật khẩu")
     if not user.is_active:
         raise HTTPException(
@@ -93,7 +97,7 @@ def refresh(
         raise HTTPException(status_code=401, detail="Refresh token không hợp lệ")
 
     user = db.get(User, token_record.user_id)
-    if user is None or not user.is_active:
+    if user is None or user.deleted_at is not None or not user.is_active:
         clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail="Tài khoản không tồn tại hoặc đã bị khóa")
 

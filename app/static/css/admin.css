@@ -346,6 +346,26 @@
   box-shadow: var(--shadow-xs);
 }
 
+.chip-count {
+  display: inline-block;
+  background-color: rgba(15, 23, 42, 0.08);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+.filter-tab.active .chip-count {
+  background-color: var(--accent-light);
+  color: var(--accent);
+}
+
+.filter-tab-trash.active .chip-count {
+  background-color: var(--error-bg);
+  color: var(--error-text);
+}
+
 .user-cell {
   display: flex;
   flex-direction: column;

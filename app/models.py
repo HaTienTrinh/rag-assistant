@@ -28,6 +28,7 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(

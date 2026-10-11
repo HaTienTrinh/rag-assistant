@@ -1,12 +1,18 @@
+import calendar
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
-from app.auth import hash_password, require_admin, revoke_all_user_tokens
+from app.auth import (
+    hash_password,
+    require_admin,
+    revoke_all_user_tokens,
+    validate_password_rules,
+)
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -25,7 +31,7 @@ EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 class CreateUserBody(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN, max_length=255)
-    password: str = Field(min_length=8, max_length=72)
+    password: str
     role: str = Field(default="user", pattern="^(admin|user)$")
     daily_limit: int | None = Field(default=None, ge=1, le=100000)
 
@@ -37,16 +43,11 @@ class UpdateUserBody(BaseModel):
 
 
 class ResetPasswordBody(BaseModel):
-    password: str = Field(min_length=8, max_length=72)
+    password: str
 
 
 class ResolveBody(BaseModel):
     resolved: bool
-
-
-def _check_password_bytes(password: str) -> None:
-    if len(password.encode()) > 72:
-        raise HTTPException(400, "Mật khẩu quá dài (tối đa 72 byte)")
 
 
 # ======================= Người dùng =======================
@@ -74,7 +75,11 @@ def _question_counts(db: Session, only_today: bool) -> dict[int, int]:
         .group_by(Conversation.user_id)
     )
     if only_today:
-        q = q.where(func.date(Message.created_at) == func.curdate())
+        offset_min = settings.display_utc_offset_minutes
+        today_display = (datetime.now(timezone.utc) + timedelta(minutes=offset_min)).date()
+        today_utc_start = datetime.combine(today_display, datetime.min.time()) - timedelta(minutes=offset_min)
+        today_utc_end = datetime.combine(today_display, datetime.max.time()) - timedelta(minutes=offset_min)
+        q = q.where(Message.created_at >= today_utc_start, Message.created_at <= today_utc_end)
     return {r[0]: r[1] for r in db.execute(q).all()}
 
 
@@ -144,7 +149,7 @@ def create_user(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    _check_password_bytes(body.password)
+    validate_password_rules(body.password)
     email = body.email.strip()
     existing_user = db.scalar(select(User).where(User.email == email))
     if existing_user:
@@ -210,7 +215,7 @@ def reset_password(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    _check_password_bytes(body.password)
+    validate_password_rules(body.password)
     user = _get_user(db, user_id)
     user.password_hash = hash_password(body.password)
     # Đặt lại mật khẩu -> thu hồi toàn bộ phiên và tăng token_version
@@ -286,14 +291,242 @@ def permanent_delete_user(
 
 @router.get("/stats")
 def stats(
+    period: str = Query("recent", pattern="^(recent|week|month|year)$"),
+    anchor: str | None = Query(None),
     days: int = Query(14, ge=1, le=90),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    today = db.scalar(select(func.curdate()))
-    since = today - timedelta(days=days - 1)
-    day = func.date(Message.created_at)
+    """Lấy số liệu thống kê hệ thống theo kỳ: recent, week, month hoặc year."""
+    offset_min = settings.display_utc_offset_minutes
+    today_display = (datetime.now(timezone.utc) + timedelta(minutes=offset_min)).date()
 
+    # 1. Xác thực ngày mốc (anchor)
+    if anchor is not None:
+        try:
+            anchor_date = datetime.strptime(anchor.strip(), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail="Ngày anchor không đúng định dạng YYYY-MM-DD")
+    else:
+        anchor_date = today_display
+
+    # 2. Tính toán khoảng thời gian (start_date, end_date), prev_anchor, next_anchor, granularity và buckets
+    if period == "recent":
+        granularity = "day"
+        end_date = anchor_date
+        start_date = end_date - timedelta(days=days - 1)
+        prev_anchor = (start_date - timedelta(days=1)).isoformat()
+        if end_date >= today_display:
+            next_anchor = None
+        else:
+            cand = end_date + timedelta(days=days)
+            next_anchor = min(today_display, cand).isoformat()
+
+        bucket_defs = []
+        for i in range(days):
+            d = start_date + timedelta(days=i)
+            bucket_defs.append({
+                "key": d.isoformat(),
+                "label": d.strftime("%d/%m"),
+                "future": d > today_display,
+            })
+
+    elif period == "week":
+        granularity = "day"
+        # Tuần bắt đầu từ thứ Hai (weekday=0) đến Chủ nhật (weekday=6)
+        start_date = anchor_date - timedelta(days=anchor_date.weekday())
+        end_date = start_date + timedelta(days=6)
+        prev_anchor = (start_date - timedelta(days=7)).isoformat()
+        next_cand = start_date + timedelta(days=7)
+        next_anchor = None if next_cand > today_display else next_cand.isoformat()
+
+        day_names = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+        bucket_defs = []
+        for i in range(7):
+            d = start_date + timedelta(days=i)
+            bucket_defs.append({
+                "key": d.isoformat(),
+                "label": f"{day_names[i]} {d.strftime('%d/%m')}",
+                "future": d > today_display,
+            })
+
+    elif period == "month":
+        granularity = "day"
+        year, month = anchor_date.year, anchor_date.month
+        start_date = date(year, month, 1)
+        num_days = calendar.monthrange(year, month)[1]
+        end_date = date(year, month, num_days)
+
+        if month == 1:
+            prev_anchor = date(year - 1, 12, 1).isoformat()
+        else:
+            prev_anchor = date(year, month - 1, 1).isoformat()
+
+        if month == 12:
+            next_cand = date(year + 1, 1, 1)
+        else:
+            next_cand = date(year, month + 1, 1)
+        next_anchor = None if next_cand > today_display else next_cand.isoformat()
+
+        bucket_defs = []
+        for day_num in range(1, num_days + 1):
+            d = date(year, month, day_num)
+            bucket_defs.append({
+                "key": d.isoformat(),
+                "label": f"{day_num:02d}",
+                "future": d > today_display,
+            })
+
+    elif period == "year":
+        granularity = "month"
+        year = anchor_date.year
+        start_date = date(year, 1, 1)
+        end_date = date(year, 12, 31)
+        prev_anchor = date(year - 1, 1, 1).isoformat()
+        next_cand = date(year + 1, 1, 1)
+        next_anchor = None if next_cand > today_display else next_cand.isoformat()
+
+        current_month_start = today_display.replace(day=1)
+        bucket_defs = []
+        for m in range(1, 13):
+            m_start = date(year, m, 1)
+            bucket_defs.append({
+                "key": f"{year}-{m:02d}",
+                "label": f"T{m}",
+                "future": m_start > current_month_start,
+            })
+
+    # 3. Chuyển đổi start_date và end_date sang timestamp UTC để truy vấn nhanh qua index
+    utc_start = datetime.combine(start_date, datetime.min.time()) - timedelta(minutes=offset_min)
+    utc_end = datetime.combine(end_date, datetime.max.time()) - timedelta(minutes=offset_min)
+
+    # Biểu thức SQL chuyển sang múi giờ hiển thị
+    display_dt = func.date_add(Message.created_at, text(f"INTERVAL {offset_min} MINUTE"))
+    msg_date = func.date(display_dt)
+    msg_month = func.date_format(display_dt, "%Y-%m")
+
+    # 4. Gom số câu hỏi và người dùng theo bucket
+    if granularity == "day":
+        questions_map = {
+            r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0]): r[1]
+            for r in db.execute(
+                select(msg_date, func.count(Message.id))
+                .where(
+                    Message.role == "user",
+                    Message.created_at >= utc_start,
+                    Message.created_at <= utc_end,
+                )
+                .group_by(msg_date)
+            ).all()
+        }
+        users_map = {
+            r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0]): r[1]
+            for r in db.execute(
+                select(msg_date, func.count(func.distinct(Conversation.user_id)))
+                .select_from(Message)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(
+                    Message.role == "user",
+                    Message.created_at >= utc_start,
+                    Message.created_at <= utc_end,
+                )
+                .group_by(msg_date)
+            ).all()
+        }
+    else:  # granularity == "month"
+        questions_map = {
+            str(r[0]): r[1]
+            for r in db.execute(
+                select(msg_month, func.count(Message.id))
+                .where(
+                    Message.role == "user",
+                    Message.created_at >= utc_start,
+                    Message.created_at <= utc_end,
+                )
+                .group_by(msg_month)
+            ).all()
+        }
+        users_map = {
+            str(r[0]): r[1]
+            for r in db.execute(
+                select(msg_month, func.count(func.distinct(Conversation.user_id)))
+                .select_from(Message)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(
+                    Message.role == "user",
+                    Message.created_at >= utc_start,
+                    Message.created_at <= utc_end,
+                )
+                .group_by(msg_month)
+            ).all()
+        }
+
+    buckets = []
+    for b in bucket_defs:
+        key = b["key"]
+        is_future = b["future"]
+        q_count = 0 if is_future else questions_map.get(key, 0)
+        u_count = 0 if is_future else users_map.get(key, 0)
+        buckets.append({
+            "key": key,
+            "label": b["label"],
+            "questions": q_count,
+            "active_users": u_count,
+            "future": is_future,
+            "date": key if granularity == "day" else f"{key}-01",
+        })
+
+    # 5. Tổng hợp trong kỳ (period_totals)
+    period_questions = sum(b["questions"] for b in buckets)
+    period_active_users = db.scalar(
+        select(func.count(func.distinct(Conversation.user_id)))
+        .select_from(Message)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(
+            Message.role == "user",
+            Message.created_at >= utc_start,
+            Message.created_at <= utc_end,
+        )
+    ) or 0
+
+    token_row = db.execute(
+        select(
+            func.coalesce(func.sum(Message.prompt_tokens), 0),
+            func.coalesce(func.sum(Message.completion_tokens), 0),
+        ).where(
+            Message.created_at >= utc_start,
+            Message.created_at <= utc_end,
+        )
+    ).one()
+    period_tokens = {"prompt": int(token_row[0]), "completion": int(token_row[1])}
+
+    # 6. Top tài liệu trích dẫn trong kỳ (giới hạn quét 20.000 bản ghi)
+    SCAN_LIMIT = 20000
+    source_rows = db.scalars(
+        select(Message.sources)
+        .where(
+            Message.role == "assistant",
+            Message.created_at >= utc_start,
+            Message.created_at <= utc_end,
+            Message.sources.is_not(None),
+        )
+        .order_by(Message.id.desc())
+        .limit(SCAN_LIMIT + 1)
+    ).all()
+    truncated = len(source_rows) > SCAN_LIMIT
+    if truncated:
+        source_rows = source_rows[:SCAN_LIMIT]
+
+    cited: Counter = Counter()
+    for sources in source_rows:
+        if not sources:
+            continue
+        for filename in {s.get("filename") for s in sources if isinstance(s, dict)}:
+            if filename:
+                cited[filename] += 1
+    top_documents = [{"filename": name, "citations": n} for name, n in cited.most_common(5)]
+
+    # 7. Số liệu tổng thể hiện tại (totals, không phụ thuộc kỳ)
     def count(column, *conds):
         return db.scalar(select(func.count(column)).where(*conds)) or 0
 
@@ -303,6 +536,21 @@ def stats(
             select(Document.status, func.count(Document.id)).group_by(Document.status)
         ).all()
     }
+
+    today_utc_start = datetime.combine(today_display, datetime.min.time()) - timedelta(minutes=offset_min)
+    today_utc_end = datetime.combine(today_display, datetime.max.time()) - timedelta(minutes=offset_min)
+
+    today_token_row = db.execute(
+        select(
+            func.coalesce(func.sum(Message.prompt_tokens), 0),
+            func.coalesce(func.sum(Message.completion_tokens), 0),
+        ).where(
+            Message.created_at >= today_utc_start,
+            Message.created_at <= today_utc_end,
+        )
+    ).one()
+    today_tokens = {"prompt": int(today_token_row[0]), "completion": int(today_token_row[1])}
+
     totals = {
         "users": count(User.id, User.deleted_at.is_(None)),
         "users_active": count(User.id, User.is_active.is_(True), User.deleted_at.is_(None)),
@@ -312,76 +560,41 @@ def stats(
         "chunks": count(Chunk.id),
         "conversations": count(Conversation.id),
         "questions": count(Message.id, Message.role == "user"),
-        "questions_today": count(Message.id, Message.role == "user", day == today),
+        "questions_today": count(
+            Message.id,
+            Message.role == "user",
+            Message.created_at >= today_utc_start,
+            Message.created_at <= today_utc_end,
+        ),
         "unanswered_open": count(
             UnansweredQuestion.id, UnansweredQuestion.resolved.is_(False)
         ),
     }
 
-    questions_by_day = {
-        r[0]: r[1]
-        for r in db.execute(
-            select(day, func.count(Message.id))
-            .where(Message.role == "user", day >= since)
-            .group_by(day)
-        ).all()
-    }
-    users_by_day = {
-        r[0]: r[1]
-        for r in db.execute(
-            select(day, func.count(func.distinct(Conversation.user_id)))
-            .select_from(Message)
-            .join(Conversation, Conversation.id == Message.conversation_id)
-            .where(Message.role == "user", day >= since)
-            .group_by(day)
-        ).all()
-    }
-    daily = []
-    for i in range(days):
-        d = since + timedelta(days=i)
-        daily.append(
-            {
-                "date": d.isoformat(),
-                "questions": questions_by_day.get(d, 0),
-                "active_users": users_by_day.get(d, 0),
-            }
-        )
-
-    # Tài liệu được trích dẫn nhiều nhất (mỗi câu trả lời tính một lần cho mỗi file)
-    source_rows = db.scalars(
-        select(Message.sources)
-        .where(Message.role == "assistant", day >= since)
-        .order_by(Message.id.desc())
-        .limit(5000)
-    ).all()
-    cited: Counter = Counter()
-    for sources in source_rows:
-        if not sources:
-            continue
-        for filename in {s.get("filename") for s in sources if isinstance(s, dict)}:
-            if filename:
-                cited[filename] += 1
-
-    def tokens(*conds):
-        row = db.execute(
-            select(
-                func.coalesce(func.sum(Message.prompt_tokens), 0),
-                func.coalesce(func.sum(Message.completion_tokens), 0),
-            ).where(*conds)
-        ).one()
-        return {"prompt": int(row[0]), "completion": int(row[1])}
-
     return {
-        "days": days,
+        "period": period,
+        "anchor": anchor_date.isoformat(),
+        "start": start_date.isoformat(),
+        "end": end_date.isoformat(),
+        "prev_anchor": prev_anchor,
+        "next_anchor": next_anchor,
+        "granularity": granularity,
+        "buckets": buckets,
         "totals": totals,
-        "daily": daily,
-        "top_documents": [
-            {"filename": name, "citations": n} for name, n in cited.most_common(5)
-        ],
-        "tokens": {
-            "period": tokens(day >= since),
-            "today": tokens(day == today),
+        "period_totals": {
+            "questions": period_questions,
+            "active_users": period_active_users,
+            "tokens": period_tokens,
         },
+        "top_documents": top_documents,
+        "tokens": {
+            "period": period_tokens,
+            "today": today_tokens,
+        },
+        "truncated": truncated,
+        # Giữ lại các trường cũ cho tính tương thích
+        "days": days if period == "recent" else len(buckets),
+        "daily": buckets,
     }
 
 

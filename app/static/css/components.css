@@ -132,6 +132,72 @@
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
 }
 
+/* Password Input với nút Toggle Ẩn/Hiện */
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap .password-input {
+  padding-right: 40px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text);
+  background-color: var(--bg-subtle);
+}
+
+.password-toggle-btn:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Khối gợi ý quy tắc mật khẩu */
+.password-rules-box {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background-color: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.password-rules-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.password-rules-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
+}
+
 /* ---------- Pills & Badges ---------- */
 .pill {
   display: inline-flex;

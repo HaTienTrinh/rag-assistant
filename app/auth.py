@@ -28,8 +28,16 @@ def verify_password(password: str, hashed: str) -> bool:
     """Kiểm tra mật khẩu người dùng khớp với bản băm."""
     try:
         return bcrypt.checkpw(password.encode(), hashed.encode())
-    except ValueError:  # ví dụ mật khẩu dài hơn 72 byte
+    except ValueError:  # ví dụ mật khẩu dài hơn 72 ký tự
         return False
+
+
+def validate_password_rules(password: str) -> None:
+    """Kiểm tra quy tắc mật khẩu dùng chung: tối thiểu 8 ký tự và tối đa 72 ký tự."""
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Mật khẩu phải có tối thiểu 8 ký tự")
+    if len(password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Mật khẩu quá dài (tối đa 72 ký tự)")
 
 
 def hash_token(raw_token: str) -> str:

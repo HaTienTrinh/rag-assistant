@@ -174,16 +174,35 @@
 .chart-bar {
   width: 100%;
   max-width: 32px;
-  min-height: 2px;
+  min-height: 0;
   background-color: var(--accent);
   border-radius: 4px 4px 0 0;
   transition: all 0.2s ease;
   cursor: pointer;
 }
 
-.chart-bar:hover {
+.chart-bar:hover:not(.future) {
   background-color: var(--accent-hover);
   filter: brightness(1.1);
+}
+
+.chart-bar.future {
+  background-color: transparent;
+  border-bottom: 2px dashed var(--border);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.chart-col.future {
+  opacity: 0.55;
+}
+
+.chart-bars-wrap.dense {
+  gap: 3px;
+}
+
+.chart-bars-wrap.dense .chart-bar {
+  max-width: 18px;
 }
 
 .chart-label {
@@ -191,6 +210,462 @@
   color: var(--text-muted);
   margin-top: 6px;
   white-space: nowrap;
+}
+
+/* Thanh điều khiển kỳ thống kê (Dashboard Controls) */
+.dashboard-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 18px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.period-segments {
+  display: inline-flex;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 3px;
+}
+
+.segment-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.segment-btn:hover {
+  color: var(--text);
+}
+
+.segment-btn.active {
+  background-color: var(--card-bg);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.period-navigator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.period-current-label {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text);
+  min-width: 170px;
+  text-align: center;
+  white-space: nowrap;
+  padding: 0 6px;
+}
+
+.nav-arrow-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-arrow-btn:hover:not(:disabled) {
+  background-color: var(--bg-subtle);
+  border-color: var(--border-focus);
+}
+
+.nav-arrow-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.today-btn {
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+
+
+/* Hàng 1: Thẻ chính (rộng gấp đôi) + Cột phụ 2 thẻ */
+.dashboard-kpi-row-1 {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+/* Thẻ chính: CÂU HỎI TRONG KỲ */
+.kpi-main-card {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 24px;
+  min-height: 165px;
+}
+
+.kpi-main-metric-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 170px;
+  flex-shrink: 0;
+}
+
+.kpi-main-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.kpi-main-val {
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin: 2px 0;
+}
+
+/* Chip so sánh */
+.comparison-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.comparison-chip.chip-positive {
+  background-color: #ECFDF3;
+  color: #067647;
+  border: 1px solid #A6F4C5;
+}
+
+.comparison-chip.chip-neutral {
+  background-color: var(--pill-neutral-bg);
+  color: var(--pill-neutral-text);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+.comparison-chip.chip-new {
+  background-color: #ECFDF3;
+  color: #067647;
+  border: 1px solid #A6F4C5;
+}
+
+.kpi-main-avg-note {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Biểu đồ cột tích hợp trong Thẻ chính */
+.kpi-main-chart-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.kpi-main-chart-area.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.kpi-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kpi-chart-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.kpi-chart-peak {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.kpi-chart-bars-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 85px;
+  padding: 6px 2px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kpi-chart-bars-wrap.dense {
+  gap: 2.5px;
+  padding-left: 1px;
+  padding-right: 1px;
+}
+
+.kpi-chart-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+  cursor: pointer;
+}
+
+.kpi-chart-bar {
+  width: 100%;
+  max-width: 16px;
+  border-radius: 2px 2px 0 0;
+  transition: height 0.2s ease, opacity 0.15s ease;
+}
+
+.kpi-chart-bar.active {
+  background-color: var(--accent);
+}
+
+.kpi-chart-col:hover .kpi-chart-bar.active {
+  opacity: 0.85;
+  filter: brightness(1.1);
+}
+
+.kpi-chart-bar.zero {
+  background-color: #CBD5E1;
+  height: 3px !important;
+}
+
+.kpi-chart-bar.future {
+  background-color: transparent;
+  height: 0 !important;
+}
+
+.kpi-chart-axis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 0 1px;
+}
+
+/* Cột phụ: Người dùng hoạt động + Token */
+.kpi-side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.kpi-side-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 16px 20px;
+  justify-content: center;
+}
+
+.kpi-side-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.kpi-side-val {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.kpi-side-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* Thanh chia tỷ lệ token */
+.token-ratio-bar {
+  display: flex;
+  width: 100%;
+  height: 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--bg-subtle);
+  margin: 6px 0 4px;
+}
+
+.token-ratio-prompt {
+  background-color: var(--accent);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.token-ratio-completion {
+  background-color: #64748B;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.token-ratio-empty {
+  background-color: var(--border);
+  height: 100%;
+  width: 100%;
+}
+
+/* Hàng 2: Dải ngang "HIỆN TẠI" */
+.kpi-current-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 14px 22px;
+}
+
+.current-strip-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: 3px 8px;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.current-strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.current-item-label {
+  color: var(--text-muted);
+}
+
+.current-item-val {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.current-item-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.current-strip-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pill-unanswered-warning {
+  display: inline-flex;
+  align-items: center;
+  background-color: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.pill-unanswered-ok {
+  display: inline-flex;
+  align-items: center;
+  background-color: #ECFDF3;
+  color: #067647;
+  border: 1px solid #A6F4C5;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.pill-failed-danger {
+  display: inline-flex;
+  align-items: center;
+  background-color: #FEF3F2;
+  color: #B42318;
+  border: 1px solid #FECDCA;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.current-strip-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.current-strip-link:hover {
+  color: var(--accent-hover);
+}
+
+.current-strip-link.link-danger {
+  color: var(--error-text);
+}
+
+.truncated-note {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  font-style: italic;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
 }
 
 /* Row 2 Cột Dashboard */
@@ -284,9 +759,8 @@
   color: var(--text);
 }
 
-/* ==========================================================================
-   2. Quản lý Người dùng (Users)
-   ========================================================================== */
+
+  
 .filter-bar {
   display: flex;
   align-items: center;
@@ -698,8 +1172,70 @@
     padding: 16px;
   }
 
+  .dashboard-controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .period-segments {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .segment-btn {
+    flex: 1;
+    text-align: center;
+    padding: 6px 8px;
+    font-size: var(--font-size-xs);
+  }
+
+  .period-navigator {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .period-current-label {
+    min-width: 0;
+    flex: 1;
+    font-size: var(--font-size-sm);
+  }
+
+  .chart-bars-wrap {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
   .dashboard-row {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-kpi-row-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-side-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .kpi-main-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 18px 20px;
+    gap: 18px;
+  }
+
+  .kpi-main-metric-col {
+    width: 100%;
+  }
+
+  .kpi-main-chart-area {
+    width: 100%;
+  }
+
+  .kpi-current-strip {
+    gap: 12px 18px;
   }
 
   .doc-master-detail {
@@ -716,5 +1252,18 @@
 
   .doc-master-detail.mobile-detail-mode #doc-list-col {
     display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .kpi-side-col {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-current-strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
   }
 }

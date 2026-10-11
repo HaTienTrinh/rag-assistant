@@ -253,6 +253,33 @@
   min-width: 0;
 }
 
+.account-menu-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.user-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  color: var(--text);
+}
+
+.user-profile-btn:hover,
+.user-profile-btn.menu-open {
+  background-color: var(--card-bg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
 .user-avatar {
   width: 32px;
   height: 32px;
@@ -284,6 +311,78 @@
 
 .user-role {
   align-self: flex-start;
+}
+
+.account-caret-icon {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.user-profile-btn.menu-open .account-caret-icon {
+  transform: rotate(180deg);
+}
+
+/* Account Popup Menu */
+.account-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dialog);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1000;
+  animation: accountMenuIn 0.15s ease-out;
+}
+
+@keyframes accountMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.account-menu-item:hover,
+.account-menu-item:focus {
+  background-color: var(--bg-subtle);
+  color: var(--accent);
+  outline: none;
+}
+
+.account-menu-item.text-danger:hover,
+.account-menu-item.text-danger:focus {
+  background-color: var(--error-bg);
+  color: var(--error-text);
 }
 
 .logout-btn {

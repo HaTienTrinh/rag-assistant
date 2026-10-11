@@ -10,17 +10,18 @@ from starlette.responses import Response
 from app import models  # noqa: F401
 from app.auth import cleanup_old_refresh_tokens
 from app.database import Base, SessionLocal, engine
-from app.migrate import ensure_columns
+from app.migrate import ensure_columns, ensure_indexes
 from app.routers import admin, auth, conversations, documents, rag
 from app.seed import seed_users
 
 
 def init_db(retries: int = 20, delay: float = 3.0) -> None:
-    """Đợi MySQL sẵn sàng, tạo bảng, thêm các cột mới còn thiếu và dọn dẹp token cũ."""
+    """Đợi MySQL sẵn sàng, tạo bảng, thêm các cột/chỉ mục mới còn thiếu và dọn dẹp token cũ."""
     for attempt in range(1, retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
             ensure_columns(engine)
+            ensure_indexes(engine)
             with SessionLocal() as db:
                 cleanup_old_refresh_tokens(db, force=True)
             return

@@ -3,7 +3,7 @@ import { api } from "../core/api.js";
 import { $, $$ } from "../ui/dom.js";
 import { renderSidebar, setSidebarActiveTab, updateSidebarBadge } from "../ui/sidebar.js";
 
-import { loadDashboard } from "../admin/dashboard.js";
+import { loadDashboard } from "../admin/dashboard.js?v=ui1";
 import { loadUsers, initUsersEvents } from "../admin/users.js";
 import { loadDocuments, stopDocumentsTimer, initDocumentsEvents } from "../admin/documents.js";
 import { loadUnanswered, initUnansweredEvents } from "../admin/unanswered.js";
@@ -15,7 +15,8 @@ const VALID_TABS = ["dashboard", "users", "documents", "unanswered"];
 // Xử lý chuyển tab quản trị theo hash của URL
 async function handleAdminRoute() {
   const hash = window.location.hash || "#/dashboard";
-  let tabName = hash.replace("#/", "");
+  const [tabPath] = hash.replace("#/", "").split("?");
+  let tabName = tabPath;
 
   if (!VALID_TABS.includes(tabName)) {
     tabName = "dashboard";

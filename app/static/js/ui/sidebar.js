@@ -1,6 +1,7 @@
 import { el, $, $$ } from "./dom.js";
 import { createSvg } from "./icons.js";
 import { logout } from "../core/auth.js";
+import { openChangePasswordDialog } from "./change-password.js";
 
 /**
  * Khởi tạo hành vi Mobile Drawer (< 900px)
@@ -245,27 +246,105 @@ export function renderSidebar({
     ];
   }
 
-  // 4. Chân Sidebar (Thông tin tài khoản & Đăng xuất)
+  // 4. Chân Sidebar: Menu tài khoản (Đổi mật khẩu, Đăng xuất)
   const roleLabel = user.role === "admin" ? "Admin" : "Người dùng";
   const roleClass = user.role === "admin" ? "pill pill-accent user-role" : "pill pill-neutral user-role";
 
-  const footerEl = el("div", { class: "sidebar-footer" },
-    el("div", { class: "user-profile" },
-      el("div", { class: "user-avatar" }, createSvg("user", 16, 16)),
-      el("div", { class: "user-meta" },
-        el("div", { class: "user-email", title: user.email }, user.email),
-        el("div", { class: roleClass }, roleLabel)
-      )
+  const accountMenu = el("div", {
+    id: "sidebar-account-menu",
+    class: "account-menu",
+    role: "menu",
+    hidden: true,
+    "aria-labelledby": "sidebar-account-btn",
+  },
+    el("button", {
+      type: "button",
+      id: "menu-change-password-btn",
+      class: "account-menu-item",
+      role: "menuitem",
+      onclick: () => {
+        closeAccountMenu();
+        openChangePasswordDialog(accountBtn);
+      },
+    },
+      createSvg("lock", 16, 16),
+      el("span", {}, "Đổi mật khẩu")
     ),
     el("button", {
-      id: "sidebar-logout-btn",
       type: "button",
-      class: "btn btn-outline btn-sm logout-btn",
+      id: "sidebar-logout-btn",
+      class: "account-menu-item text-danger",
+      role: "menuitem",
       title: "Đăng xuất khỏi tài khoản",
-      onclick: () => logout(),
+      onclick: () => {
+        closeAccountMenu();
+        logout();
+      },
     },
       createSvg("logout", 16, 16),
       el("span", {}, "Đăng xuất")
+    )
+  );
+
+  const accountBtn = el("button", {
+    type: "button",
+    id: "sidebar-account-btn",
+    class: "user-profile-btn",
+    "aria-haspopup": "menu",
+    "aria-expanded": "false",
+    title: "Tài khoản (nhấn để mở menu)",
+    onclick: (e) => {
+      e.stopPropagation();
+      toggleAccountMenu();
+    },
+  },
+    el("div", { class: "user-avatar" }, createSvg("user", 16, 16)),
+    el("div", { class: "user-meta" },
+      el("div", { class: "user-email", title: user.email }, user.email),
+      el("div", { class: roleClass }, roleLabel)
+    ),
+    el("div", { class: "account-caret-icon" }, createSvg("chevron-up", 14, 14))
+  );
+
+  function openAccountMenu() {
+    accountMenu.hidden = false;
+    accountBtn.setAttribute("aria-expanded", "true");
+    accountBtn.classList.add("menu-open");
+  }
+
+  function closeAccountMenu() {
+    accountMenu.hidden = true;
+    accountBtn.setAttribute("aria-expanded", "false");
+    accountBtn.classList.remove("menu-open");
+  }
+
+  function toggleAccountMenu() {
+    if (accountMenu.hidden) {
+      openAccountMenu();
+    } else {
+      closeAccountMenu();
+    }
+  }
+
+  // Đóng menu khi click ra ngoài
+  document.addEventListener("click", (e) => {
+    if (!accountMenu.hidden && !accountMenu.contains(e.target) && !accountBtn.contains(e.target)) {
+      closeAccountMenu();
+    }
+  });
+
+  // Đóng menu khi bấm phím Escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !accountMenu.hidden) {
+      closeAccountMenu();
+      accountBtn.focus();
+    }
+  });
+
+  const footerEl = el("div", { class: "sidebar-footer" },
+    el("div", { class: "account-menu-wrap" },
+      accountMenu,
+      accountBtn
     )
   );
 

@@ -1,14 +1,74 @@
-import { requireAuth } from "../core/auth.js";
+import { requireAuth, getAccessToken } from "../core/auth.js";
 import { api, postJSON } from "../core/api.js";
 import { el, $ } from "../ui/dom.js";
 import { createSvg } from "../ui/icons.js";
 import { toast } from "../ui/toast.js";
 import { showConfirmDialog } from "../ui/dialog.js";
 import { renderSidebar, updateSidebarConversations } from "../ui/sidebar.js";
+import { openDocumentViewer } from "../ui/doc-viewer.js";
 
 let me = null;
 let activeConv = null;
 let conversationsList = [];
+
+// Tạo khối hiển thị danh sách nguồn trích dẫn đính kèm cuối tin nhắn
+function createSourcesBox(sources) {
+  if (!sources || sources.length === 0) return null;
+  const sourcesBox = el("div", { class: "sources-box" });
+  const details = el("details", { class: "sources-details" });
+  const summary = el("summary", {}, `Nguồn (${sources.length})`);
+  details.append(summary);
+
+  const list = el("div", { class: "sources-list" });
+  sources.forEach((s, idx) => {
+    const item = el("div", {
+      class: "source-item source-item-clickable",
+      role: "button",
+      tabindex: "0",
+      title: "Bấm để xem tài liệu tại trang này",
+      "aria-label": `Xem tài liệu ${s.filename}${s.page ? ` trang ${s.page}` : ""}`,
+    });
+    const whereTitle = s.filename + (s.page ? `, trang ${s.page}` : "");
+
+    const whereEl = el("div", { class: "source-where" });
+    const whereTitleSpan = el("span", { class: "source-where-text" }, `[${idx + 1}] ${whereTitle}`);
+    const viewBadge = el("span", { class: "source-view-badge" }, "Xem ↗");
+    whereEl.append(whereTitleSpan, viewBadge);
+
+    const snippet = s.content && s.content.length > 220
+      ? s.content.slice(0, 220) + "…"
+      : (s.content || "");
+
+    const snippetEl = el("div", { class: "source-snippet" });
+    snippetEl.textContent = snippet;
+
+    item.append(whereEl, snippetEl);
+
+    // Sự kiện bấm vào nguồn để mở Popup Modal xem trước tài liệu tại chỗ
+    const handleOpenDoc = (e) => {
+      e.preventDefault();
+      openDocumentViewer({
+        docId: s.document_id,
+        filename: s.filename,
+        page: s.page,
+        triggerEl: item,
+      });
+    };
+
+    item.addEventListener("click", handleOpenDoc);
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        handleOpenDoc(e);
+      }
+    });
+
+    list.append(item);
+  });
+
+  details.append(list);
+  sourcesBox.append(details);
+  return sourcesBox;
+}
 
 // Hiển thị bong bóng tin nhắn chat (User căn phải, Assistant căn trái)
 function createMessageBubble(role, content, sources) {
@@ -19,33 +79,8 @@ function createMessageBubble(role, content, sources) {
   textNode.textContent = content; // An toàn tuyệt đối chống XSS
   bubble.append(textNode);
 
-  if (sources && sources.length > 0) {
-    const sourcesBox = el("div", { class: "sources-box" });
-    const details = el("details", { class: "sources-details" });
-    const summary = el("summary", {}, `Nguồn (${sources.length})`);
-    details.append(summary);
-
-    const list = el("div", { class: "sources-list" });
-    sources.forEach((s, idx) => {
-      const item = el("div", { class: "source-item" });
-      const whereTitle = s.filename + (s.page ? `, trang ${s.page}` : "");
-
-      const whereEl = el("div", { class: "source-where" });
-      whereEl.textContent = `[${idx + 1}] ${whereTitle}`;
-
-      const snippet = s.content && s.content.length > 220
-        ? s.content.slice(0, 220) + "…"
-        : (s.content || "");
-
-      const snippetEl = el("div", { class: "source-snippet" });
-      snippetEl.textContent = snippet;
-
-      item.append(whereEl, snippetEl);
-      list.append(item);
-    });
-
-    details.append(list);
-    sourcesBox.append(details);
+  const sourcesBox = createSourcesBox(sources);
+  if (sourcesBox) {
     bubble.append(sourcesBox);
   }
 
@@ -180,7 +215,7 @@ async function handleChatRoute() {
   }
 }
 
-// Gửi câu hỏi đến server
+// Gửi câu hỏi đến server và hiển thị streaming token-by-token
 async function sendQuestion(text) {
   const box = $("#messages");
   if (!box) return;
@@ -197,11 +232,14 @@ async function sendQuestion(text) {
   // Hiển thị bong bóng chờ câu trả lời
   const pendingRow = el("div", { class: "msg-row assistant-row" });
   const pendingBubble = el("div", { class: "msg-bubble msg-assistant" });
-  const typingText = el("span", { class: "typing-indicator" }, "Đang trả lời…");
+  const typingText = el("span", { class: "typing-indicator" }, "Đang suy nghĩ…");
   pendingBubble.append(typingText);
   pendingRow.append(pendingBubble);
   box.append(pendingRow);
   scrollToBottom();
+
+  const msgText = el("div", { class: "msg-text" });
+  const cursor = el("span", { class: "typing-cursor" });
 
   try {
     // Nếu chưa có hội thoại, tạo mới trước
@@ -211,17 +249,84 @@ async function sendQuestion(text) {
       history.replaceState(null, "", `#/chat/${activeConv}`);
     }
 
-    const res = await postJSON(`/conversations/${activeConv}/ask`, { question: text });
-    pendingRow.replaceWith(createMessageBubble("assistant", res.message.content, res.message.sources));
-    await loadConversations();
+    const token = getAccessToken();
+    const res = await fetch(`/conversations/${activeConv}/ask`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ question: text, stream: true }),
+    });
+
+    if (!res.ok) {
+      let errMsg = "Không xử lý được câu hỏi";
+      try {
+        const errData = await res.json();
+        errMsg = errData.detail || errData.message || errMsg;
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let receivedFirstToken = false;
+    let fullContent = "";
+    let finalSources = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // Giữ lại phần dở dang nếu dòng chưa kết thúc
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+        try {
+          const data = JSON.parse(trimmed.slice(6));
+          if (data.type === "delta") {
+            if (!receivedFirstToken) {
+              receivedFirstToken = true;
+              pendingBubble.replaceChildren(msgText);
+            }
+            fullContent += data.text;
+            msgText.textContent = fullContent;
+            msgText.append(cursor);
+            scrollToBottom();
+          } else if (data.type === "sources") {
+            finalSources = data.sources;
+          } else if (data.type === "done") {
+            cursor.remove();
+            const sourcesBox = createSourcesBox(finalSources);
+            if (sourcesBox) {
+              pendingBubble.append(sourcesBox);
+            }
+            await loadConversations();
+            scrollToBottom();
+          } else if (data.type === "error") {
+            throw new Error(data.message || "Lỗi khi xử lý câu hỏi");
+          }
+        } catch (e) {
+          if (e.message && e.message.startsWith("Lỗi")) throw e;
+        }
+      }
+    }
+
+    cursor.remove();
   } catch (err) {
+    cursor.remove();
     pendingRow.replaceWith(createErrorBubble(err.message));
   } finally {
     if (sendBtn) sendBtn.disabled = false;
     scrollToBottom();
     const textarea = $("#question");
     if (textarea) {
-      textarea.style.height = "auto";
+      textarea.style.height = "44px";
       textarea.focus();
     }
   }
@@ -251,8 +356,8 @@ async function initChatPage() {
 
   if (textarea) {
     textarea.addEventListener("input", () => {
-      textarea.style.height = "auto";
-      textarea.style.height = Math.min(140, textarea.scrollHeight) + "px";
+      textarea.style.height = "44px";
+      textarea.style.height = Math.min(140, Math.max(44, textarea.scrollHeight)) + "px";
     });
 
     textarea.addEventListener("keydown", (e) => {
@@ -270,7 +375,7 @@ async function initChatPage() {
       const sendBtn = $("#send-btn");
       if (!text || (sendBtn && sendBtn.disabled)) return;
       textarea.value = "";
-      textarea.style.height = "auto";
+      textarea.style.height = "44px";
       sendQuestion(text);
     });
   }

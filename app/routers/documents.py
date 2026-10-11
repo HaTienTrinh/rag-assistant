@@ -10,15 +10,17 @@ from fastapi import (
     Query,
     UploadFile,
 )
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.auth import require_admin
+from app.auth import get_current_user, require_admin
 from app.config import settings
 from app.database import get_db
 from app.models import Chunk, Document, User
 from app.services.ingest import process_document, stored_path
+from app.services.retrieval import invalidate_retrieval_cache
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -145,6 +147,7 @@ def update_document(
     doc = _get_doc(db, doc_id)
     doc.is_active = body.is_active
     db.commit()
+    invalidate_retrieval_cache()
     return _serialize(doc, _chunk_count(db, doc_id))
 
 
@@ -167,6 +170,7 @@ def reprocess_document(
     doc.status = "pending"
     doc.error = None
     db.commit()
+    invalidate_retrieval_cache()
 
     background_tasks.add_task(process_document, doc_id)
     return _serialize(doc, 0)
@@ -181,5 +185,62 @@ def delete_document(
     db.execute(delete(Chunk).where(Chunk.document_id == doc_id))
     db.delete(doc)
     db.commit()
+    invalidate_retrieval_cache()
     path.unlink(missing_ok=True)
     return {"deleted": doc_id}
+
+
+@router.get("/raw/by-name")
+def view_document_by_name(
+    filename: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Cho phép người dùng đã đăng nhập xem nội dung tài liệu theo tên file (hỗ trợ trích dẫn cũ)."""
+    query = select(Document).where(Document.filename == filename)
+    if user.role != "admin":
+        query = query.where(Document.status == "done", Document.is_active.is_(True))
+
+    doc = db.scalar(query.order_by(Document.id.desc()))
+    if doc is None:
+        raise HTTPException(404, "Không tìm thấy tài liệu")
+
+    path = stored_path(doc)
+    if not path.exists():
+        raise HTTPException(404, "Không tìm thấy file tài liệu trên máy chủ")
+
+    ext = path.suffix.lower()
+    media_type = "application/pdf" if ext == ".pdf" else "text/plain; charset=utf-8" if ext == ".txt" else "application/octet-stream"
+
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=doc.filename,
+        content_disposition_type="inline",
+    )
+
+
+@router.get("/{doc_id}/file")
+def view_document_file(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Cho phép người dùng đã đăng nhập xem nội dung tài liệu theo document_id (nhúng vào modal xem trước)."""
+    doc = _get_doc(db, doc_id)
+    if user.role != "admin" and (doc.status != "done" or not doc.is_active):
+        raise HTTPException(403, "Tài liệu này hiện không khả dụng")
+
+    path = stored_path(doc)
+    if not path.exists():
+        raise HTTPException(404, "Không tìm thấy file tài liệu trên máy chủ")
+
+    ext = path.suffix.lower()
+    media_type = "application/pdf" if ext == ".pdf" else "text/plain; charset=utf-8" if ext == ".txt" else "application/octet-stream"
+
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=doc.filename,
+        content_disposition_type="inline",
+    )

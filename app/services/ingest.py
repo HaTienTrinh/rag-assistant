@@ -36,6 +36,8 @@ def process_document(doc_id: int) -> None:
             doc.status = "done"
             doc.error = None
             db.commit()
+            from app.services.retrieval import invalidate_retrieval_cache
+            invalidate_retrieval_cache()
         except Exception as exc:
             db.rollback()
             doc = db.get(Document, doc_id)

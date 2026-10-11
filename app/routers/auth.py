@@ -1,8 +1,10 @@
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -12,9 +14,12 @@ from app.auth import (
     clear_refresh_cookie,
     create_access_token,
     get_current_user,
+    hash_password,
     hash_token,
     require_admin,
+    revoke_all_user_tokens,
     set_refresh_cookie,
+    validate_password_rules,
     verify_password,
 )
 from app.config import settings
@@ -22,6 +27,16 @@ from app.database import get_db
 from app.models import RefreshToken, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Theo dõi số lần nhập sai mật khẩu hiện tại trong 15 phút: user_id -> list timestamp (float)
+_failed_password_attempts: dict[int, list[float]] = {}
+FAILED_ATTEMPTS_LIMIT = 5
+FAILED_ATTEMPTS_WINDOW_SECONDS = 15 * 60  # 15 phút
+
+
+class ChangePasswordBody(BaseModel):
+    current_password: str
+    new_password: str
 
 
 @router.post("/login")
@@ -200,3 +215,89 @@ def me(user: User = Depends(get_current_user)):
 @router.get("/admin-check")
 def admin_check(user: User = Depends(require_admin)):
     return {"message": f"Xin chào admin {user.email}"}
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordBody,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Người dùng tự đổi mật khẩu cho tài khoản của chính mình."""
+    now_ts = time.time()
+    # Lọc các lần nhập sai trong vòng 15 phút gần nhất
+    attempts = [
+        t
+        for t in _failed_password_attempts.get(current_user.id, [])
+        if now_ts - t < FAILED_ATTEMPTS_WINDOW_SECONDS
+    ]
+    _failed_password_attempts[current_user.id] = attempts
+
+    # Nếu đã nhập sai đủ 5 lần trong 15 phút -> Chặn 429
+    if len(attempts) >= FAILED_ATTEMPTS_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="Bạn đã nhập sai mật khẩu quá 5 lần. Vui lòng thử lại sau 15 phút.",
+        )
+
+    # Kiểm tra mật khẩu hiện tại (sai -> 400 'Mật khẩu hiện tại không đúng')
+    if not verify_password(body.current_password, current_user.password_hash):
+        attempts.append(now_ts)
+        _failed_password_attempts[current_user.id] = attempts
+        if len(attempts) >= FAILED_ATTEMPTS_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail="Bạn đã nhập sai mật khẩu quá 5 lần. Vui lòng thử lại sau 15 phút.",
+            )
+        raise HTTPException(status_code=400, detail="Mật khẩu hiện tại không đúng")
+
+    # Mật khẩu hiện tại đúng -> xóa các lần nhập sai trước đó
+    _failed_password_attempts.pop(current_user.id, None)
+
+    # Kiểm tra mật khẩu mới: tối thiểu 8 ký tự, tối đa 72 byte
+    validate_password_rules(body.new_password)
+
+    # Mật khẩu mới không được trùng mật khẩu hiện tại
+    if verify_password(body.new_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=400, detail="Mật khẩu mới không được trùng mật khẩu hiện tại"
+        )
+
+    # Lưu băm mới
+    current_user.password_hash = hash_password(body.new_password)
+
+    # Thu hồi toàn bộ refresh token và tăng token_version để vô hiệu hóa tất cả thiết bị/phiên khác
+    revoke_all_user_tokens(db, current_user)
+
+    # Cấp cặp token mới cho chính phiên hiện tại để người đổi không bị đăng xuất
+    raw_refresh_token = secrets.token_urlsafe(32)
+    token_hash = hash_token(raw_refresh_token)
+    family_id = secrets.token_hex(16)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=settings.refresh_token_expire_days)
+    user_agent = request.headers.get("user-agent", "")[:255]
+
+    refresh_record = RefreshToken(
+        user_id=current_user.id,
+        token_hash=token_hash,
+        family_id=family_id,
+        created_at=now,
+        expires_at=expires_at,
+        user_agent=user_agent,
+    )
+    db.add(refresh_record)
+    db.commit()
+
+    # Đặt cookie refresh mới
+    set_refresh_cookie(response, raw_refresh_token)
+
+    # Trả về access token mới tương ứng với token_version mới và thời hạn expires_in
+    expires_in = settings.access_token_expire_minutes * 60
+    return {
+        "access_token": create_access_token(current_user.id, current_user.token_version),
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "message": "Đã đổi mật khẩu thành công",
+    }

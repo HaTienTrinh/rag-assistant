@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -51,6 +52,10 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = "messages"
+    # Chỉ mục tổng hợp (role, created_at) giúp tăng tốc độ lọc và thống kê theo vai trò và mốc thời gian
+    __table_args__ = (
+        Index("ix_messages_role_created_at", "role", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     conversation_id: Mapped[int] = mapped_column(

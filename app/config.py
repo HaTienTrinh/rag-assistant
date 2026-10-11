@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 15
     top_k: int = 8
     min_score: float = 0.25  # dưới ngưỡng này coi như không tìm thấy tài liệu phù hợp
+    debug_rag: bool = False  # bật True để ghi log chẩn đoán RAG cấp INFO cho mỗi câu hỏi
 
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
 
     history_messages: int = 8
     daily_question_limit: int = 50
+    display_utc_offset_minutes: int = 420  # độ lệch múi giờ hiển thị so với UTC (phút), mặc định 420 = UTC+7 (giờ VN)
 
     admin_email: str = ""
     admin_password: str = ""

@@ -9,6 +9,7 @@ NEW_COLUMNS = {
         ("daily_limit", "INT NULL"),
         ("last_login_at", "DATETIME NULL"),
         ("deleted_at", "DATETIME NULL"),
+        ("must_change_password", "TINYINT(1) NOT NULL DEFAULT 0"),
     ],
     "documents": [("is_active", "TINYINT(1) NOT NULL DEFAULT 1")],
     "messages": [("prompt_tokens", "INT NULL"), ("completion_tokens", "INT NULL")],

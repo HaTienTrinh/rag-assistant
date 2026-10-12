@@ -8,11 +8,13 @@ Sử dụng:
 import argparse
 import os
 import sys
+import io
 import time
 import uuid
 from typing import Any
 
 import httpx
+import openpyxl
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -83,11 +85,13 @@ def auth_refresh(client: httpx.Client) -> httpx.Response:
     return resp
 
 
-def create_user_via_admin(client: httpx.Client, base_url: str, email: str, password: str, role: str = "user") -> int:
+def create_user_via_admin(
+    client: httpx.Client, base_url: str, email: str, password: str, role: str = "user", require_change: bool = False
+) -> int:
     """Tạo người dùng thông qua API quản trị."""
     resp = client.post(
         f"{base_url}/admin/users",
-        json={"email": email, "password": password, "role": role, "daily_limit": None}
+        json={"email": email, "password": password, "role": role, "daily_limit": None, "require_change": require_change}
     )
     if resp.status_code != 201:
         raise RuntimeError(f"Không thể tạo user thử nghiệm: {resp.status_code} {resp.text}")
@@ -157,6 +161,7 @@ def run_smoke_tests(base_url: str, admin_email: str, admin_password: str) -> boo
         tr.record("Kịch bản 1 (Auth)", "Dùng lại refresh token cũ bị từ chối/thu hồi", old_token_rejected)
 
         # 1.4 Đăng xuất làm refresh thất bại
+        auth_login(user_client, test_email, test_password)
         u_logout = user_client.post("/auth/logout")
         tr.record("Kịch bản 1 (Auth)", "Đăng xuất thành công", u_logout.status_code == 200)
 
@@ -316,6 +321,289 @@ def run_smoke_tests(base_url: str, admin_email: str, admin_password: str) -> boo
 
         stats_bad_days = admin_client.get("/admin/stats?period=recent&days=9999")
         tr.record("Kịch bản 5 (Stats)", "Gọi days không hợp lệ (>365) trả về 400 hoặc 422", stats_bad_days.status_code in (400, 422))
+
+        # ==========================================
+        # KỊCH BẢN 6: BẮT BUỘC ĐỔI MẬT KHẨU (PHASE IMPORT-A)
+        # ==========================================
+        print("\n>> Kịch bản 6: Bắt buộc đổi mật khẩu ở lần đăng nhập đầu tiên (PHASE IMPORT-A)...")
+        # 6.1 Tạo user mặc định (không truyền require_change) -> mặc định phải là require_change=True
+        req_email = f"must_change_{uuid.uuid4().hex[:8]}@example.com"
+        req_pass_init = "InitialPass123@"
+        resp_def = admin_client.post(
+            f"{base_url}/admin/users",
+            json={"email": req_email, "password": req_pass_init, "role": "user", "daily_limit": None}
+        )
+        tr.record("Kịch bản 6 (MustChange)", "Admin tạo user mặc định thành công", resp_def.status_code == 201)
+        req_user_id = resp_def.json()["id"]
+        users_to_cleanup.append(req_user_id)
+        tr.record("Kịch bản 6 (MustChange)", "Trường must_change_password mặc định là True", resp_def.json().get("must_change_password") is True)
+
+        # Kiểm tra GET /admin/users trả về must_change_password cho từng người
+        admin_users_list = admin_client.get(f"{base_url}/admin/users").json()
+        target_in_list = next((u for u in admin_users_list if u["id"] == req_user_id), None)
+        tr.record("Kịch bản 6 (MustChange)", "GET /admin/users chứa cờ must_change_password=True", target_in_list is not None and target_in_list.get("must_change_password") is True)
+
+        # 6.2 User đăng nhập bằng mật khẩu tạm
+        req_client = httpx.Client(base_url=base_url, timeout=15.0)
+        u_login = auth_login(req_client, req_email, req_pass_init)
+        tr.record("Kịch bản 6 (MustChange)", "User đăng nhập bằng mật khẩu tạm thành công", u_login.status_code == 200)
+
+        # 6.3 GET /auth/me trả về must_change_password=True
+        me_resp = req_client.get("/auth/me")
+        tr.record("Kịch bản 6 (MustChange)", "GET /auth/me trả về must_change_password=True", me_resp.status_code == 200 and me_resp.json().get("must_change_password") is True)
+
+        # 6.4 Chặn gọi API nghiệp vụ (GET /conversations) với 403 và header X-Error-Code
+        blocked_conv = req_client.get("/conversations")
+        tr.record(
+            "Kịch bản 6 (MustChange)",
+            "Chặn API /conversations trả về 403 kèm header X-Error-Code",
+            blocked_conv.status_code == 403
+            and blocked_conv.headers.get("X-Error-Code") == "PASSWORD_CHANGE_REQUIRED"
+            and "Bạn cần đổi mật khẩu trước khi tiếp tục" in blocked_conv.text
+        )
+
+        # 6.5 POST /auth/logout vẫn hoạt động bình thường khi có cờ
+        logout_resp = req_client.post("/auth/logout")
+        tr.record("Kịch bản 6 (MustChange)", "POST /auth/logout hoạt động khi cờ bật", logout_resp.status_code == 200)
+
+        # Đăng nhập lại để tiếp tục đổi mật khẩu
+        auth_login(req_client, req_email, req_pass_init)
+
+        # 6.6 POST /auth/change-password thành công thì xóa cờ
+        req_pass_new = "NewSecretPass888@"
+        change_resp = req_client.post(
+            "/auth/change-password",
+            json={"current_password": req_pass_init, "new_password": req_pass_new}
+        )
+        tr.record("Kịch bản 6 (MustChange)", "Đổi mật khẩu thành công khi cờ bật", change_resp.status_code == 200)
+
+        if change_resp.status_code == 200 and change_resp.json().get("access_token"):
+            req_client.headers["Authorization"] = f"Bearer {change_resp.json()['access_token']}"
+
+        # 6.7 Sau khi đổi xong: GET /auth/me trả về must_change_password=False
+        me_after_change = req_client.get("/auth/me")
+        tr.record("Kịch bản 6 (MustChange)", "Sau khi đổi: cờ must_change_password=False", me_after_change.status_code == 200 and me_after_change.json().get("must_change_password") is False)
+
+        # 6.8 Sau khi đổi xong: API /conversations hoạt động bình thường
+        unblocked_conv = req_client.get("/conversations")
+        tr.record("Kịch bản 6 (MustChange)", "Sau khi đổi: API /conversations được phép truy cập", unblocked_conv.status_code == 200)
+
+        # 6.9 Admin đặt lại mật khẩu với require_change=True
+        req_pass_reset = "AdminResetPass999@"
+        reset_resp = admin_client.post(
+            f"{base_url}/admin/users/{req_user_id}/reset-password",
+            json={"password": req_pass_reset, "require_change": True}
+        )
+        tr.record("Kịch bản 6 (MustChange)", "Admin đặt lại mật khẩu với require_change=True", reset_resp.status_code == 200)
+
+        # Phiên cũ bị thu hồi
+        old_session_blocked = req_client.get("/conversations")
+        tr.record("Kịch bản 6 (MustChange)", "Đặt lại mật khẩu thu hồi phiên cũ", old_session_blocked.status_code in (401, 403))
+
+        # Đăng nhập lại bằng mật khẩu mới đặt lại
+        auth_login(req_client, req_email, req_pass_reset)
+        me_after_reset = req_client.get("/auth/me")
+        tr.record("Kịch bản 6 (MustChange)", "Đăng nhập sau khi đặt lại: cờ bật trở lại", me_after_reset.status_code == 200 and me_after_reset.json().get("must_change_password") is True)
+
+        # Đổi lại mật khẩu để tài khoản trở về bình thường
+        req_pass_final = "FinalNewPass777@"
+        req_client.post(
+            "/auth/change-password",
+            json={"current_password": req_pass_reset, "new_password": req_pass_final}
+        )
+
+        # 6.10 Admin đặt lại mật khẩu với require_change=False
+        req_pass_reset2 = "AdminResetPassNoChange1@"
+        reset_resp2 = admin_client.post(
+            f"{base_url}/admin/users/{req_user_id}/reset-password",
+            json={"password": req_pass_reset2, "require_change": False}
+        )
+        tr.record("Kịch bản 6 (MustChange)", "Admin đặt lại mật khẩu với require_change=False", reset_resp2.status_code == 200)
+
+        auth_login(req_client, req_email, req_pass_reset2)
+        me_no_change = req_client.get("/auth/me")
+        tr.record("Kịch bản 6 (MustChange)", "require_change=False thì không bật cờ", me_no_change.status_code == 200 and me_no_change.json().get("must_change_password") is False)
+
+        conv_no_change = req_client.get("/conversations")
+        tr.record("Kịch bản 6 (MustChange)", "Dùng bình thường ngay khi tắt checkbox", conv_no_change.status_code == 200)
+
+        # 6.11 Admin bị bật cờ: cũng bị chặn truy cập /admin/* cho tới khi đổi
+        admin_test_email = f"admin_must_change_{uuid.uuid4().hex[:8]}@example.com"
+        admin_test_pass = "AdminPassInit123@"
+        admin_test_id = create_user_via_admin(admin_client, base_url, admin_test_email, admin_test_pass, role="admin", require_change=True)
+        users_to_cleanup.append(admin_test_id)
+
+        admin_test_client = httpx.Client(base_url=base_url, timeout=15.0)
+        auth_login(admin_test_client, admin_test_email, admin_test_pass)
+        admin_blocked = admin_test_client.get("/admin/users")
+        tr.record(
+            "Kịch bản 6 (MustChange)",
+            "Admin có cờ must_change_password bị chặn /admin/users trả về 403",
+            admin_blocked.status_code == 403 and admin_blocked.headers.get("X-Error-Code") == "PASSWORD_CHANGE_REQUIRED"
+        )
+
+        # ==========================================
+        # 7. KỊCH BẢN 7: TẠO TÀI KHOẢN HÀNG LOẠT (PHASE IMPORT-B)
+        # ==========================================
+        print("\n>> Kịch bản 7: Nhập tài khoản hàng loạt (PHASE IMPORT-B)...")
+
+        # 7.1 Tải file mẫu
+        tpl_resp = admin_client.get(f"{base_url}/admin/users-import/template")
+        tr.record(
+            "Kịch bản 7 (BulkImport)",
+            "Tải file Excel mẫu mau-tao-tai-khoan.xlsx",
+            tpl_resp.status_code == 200 and "application/vnd.openxmlformats" in tpl_resp.headers.get("content-type", "") and "mau-tao-tai-khoan.xlsx" in tpl_resp.headers.get("content-disposition", "")
+        )
+
+        try:
+            tpl_wb = openpyxl.load_workbook(io.BytesIO(tpl_resp.content))
+            sheet = tpl_wb.active
+            is_valid_tpl = sheet["A1"].value == "email" and sheet["A2"].value and "example.com" in str(sheet["A2"].value)
+        except Exception:
+            is_valid_tpl = False
+        tr.record("Kịch bản 7 (BulkImport)", "File mẫu đọc được bằng openpyxl và có cột email", is_valid_tpl)
+
+        # 7.2 Phân quyền: Khách và User thường bị chặn
+        unauth_client = httpx.Client(base_url=base_url, timeout=15.0)
+        unauth_tpl = unauth_client.get(f"{base_url}/admin/users-import/template")
+        unauth_imp = unauth_client.post(f"{base_url}/admin/users-import")
+        tr.record("Kịch bản 7 (BulkImport)", "Chưa đăng nhập gọi endpoint nhận 401", unauth_tpl.status_code == 401 and unauth_imp.status_code == 401)
+
+        user_tpl = req_client.get(f"{base_url}/admin/users-import/template")
+        user_imp = req_client.post(f"{base_url}/admin/users-import")
+        tr.record("Kịch bản 7 (BulkImport)", "User thường gọi endpoint nhận 403", user_tpl.status_code == 403 and user_imp.status_code == 403)
+
+        # 7.3 Xác thực file lỗi & zip bomb / kích thước
+        fake_xlsx_resp = admin_client.post(
+            f"{base_url}/admin/users-import",
+            data={"dry_run": "true"},
+            files={"file": ("fake.xlsx", b"this is not a zip pk file", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+        tr.record("Kịch bản 7 (BulkImport)", "File .txt đổi tên thành .xlsx bị từ chối 400", fake_xlsx_resp.status_code == 400)
+
+        big_file_resp = admin_client.post(
+            f"{base_url}/admin/users-import",
+            data={"dry_run": "true"},
+            files={"file": ("big.xlsx", b"0" * (2 * 1024 * 1024 + 100), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+        tr.record("Kịch bản 7 (BulkImport)", "File vượt quá 2 MB bị từ chối 400", big_file_resp.status_code == 400)
+
+        # 7.4 Phân loại đầy đủ với dry_run
+        trash_email = f"trash_bulk_{uuid.uuid4().hex[:8]}@example.com"
+        trash_uid = create_user_via_admin(admin_client, base_url, trash_email, "TrashPass1234@")
+        admin_client.delete(f"{base_url}/admin/users/{trash_uid}")
+        users_to_cleanup.append(trash_uid)
+
+        users_before_dry = len(admin_client.get(f"{base_url}/admin/users").json())
+
+        wb_dry = openpyxl.Workbook()
+        ws_dry = wb_dry.active
+        ws_dry.append(["Địa chỉ Email", "Ghi chú"])
+        val_email = f"bulk_val_{uuid.uuid4().hex[:8]}@example.com"
+        ws_dry.append([val_email, "Hợp lệ"])
+        ws_dry.append([val_email.upper(), "Trùng lặp trong file"])
+        ws_dry.append(["invalid_email_format", "Sai định dạng"])
+        ws_dry.append([admin_email, "Đã tồn tại"])
+        ws_dry.append([trash_email, "Trong thùng rác"])
+        ws_dry.append(["multi1@example.com, multi2@example.com", "Nhiều email trong 1 ô"])
+        ws_dry.append(["=1+1", "Công thức"])
+
+        buf_dry = io.BytesIO()
+        wb_dry.save(buf_dry)
+
+        dry_resp = admin_client.post(
+            f"{base_url}/admin/users-import",
+            data={"dry_run": "true"},
+            files={"file": ("test_classify.xlsx", buf_dry.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+        tr.record("Kịch bản 7 (BulkImport)", "Gọi dry_run thành công 200", dry_resp.status_code == 200)
+
+        dry_json = dry_resp.json()
+        summary = dry_json.get("summary", {})
+        is_classified_correctly = (
+            summary.get("valid") == 1
+            and summary.get("duplicate_in_file") == 1
+            and summary.get("invalid") == 3
+            and summary.get("exists") == 1
+            and summary.get("in_trash") == 1
+            and summary.get("created") == 0
+        )
+        tr.record("Kịch bản 7 (BulkImport)", "Phân loại chính xác 5 nhóm trạng thái", is_classified_correctly, f"summary={summary}")
+
+        users_after_dry = len(admin_client.get(f"{base_url}/admin/users").json())
+        tr.record("Kịch bản 7 (BulkImport)", "dry_run không tạo tài khoản vào DB", users_before_dry == users_after_dry)
+
+        # 7.5 Tạo thật (dry_run = False)
+        wb_real = openpyxl.Workbook()
+        ws_real = wb_real.active
+        ws_real.append(["email"])
+        real_user1_email = f"bulk_u1_{uuid.uuid4().hex[:8]}@example.com"
+        real_user2_email = f"bulk_u2_{uuid.uuid4().hex[:8]}@example.com"
+        ws_real.append([real_user1_email])
+        ws_real.append([real_user2_email])
+
+        buf_real = io.BytesIO()
+        wb_real.save(buf_real)
+
+        real_resp = admin_client.post(
+            f"{base_url}/admin/users-import",
+            data={"dry_run": "false", "daily_limit": "30", "require_password_change": "true"},
+            files={"file": ("real_import.xlsx", buf_real.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+        tr.record("Kịch bản 7 (BulkImport)", "Tạo tài khoản thật trả về 200", real_resp.status_code == 200)
+        tr.record("Kịch bản 7 (BulkImport)", "Header Cache-Control chứa no-store", "no-store" in real_resp.headers.get("cache-control", ""))
+
+        real_json = real_resp.json()
+        real_summary = real_json.get("summary", {})
+        tr.record("Kịch bản 7 (BulkImport)", "Tạo thành công 2 tài khoản mới", real_summary.get("created") == 2 and real_summary.get("valid") == 0)
+
+        created_passwords = {}
+        for row in real_json.get("rows", []):
+            if row.get("status") == "created":
+                created_passwords[row["email"]] = row.get("password")
+
+        pwd1 = created_passwords.get(real_user1_email)
+        tr.record("Kịch bản 7 (BulkImport)", "Mật khẩu tạm 12 ký tự không chứa ký tự nhầm lẫn", bool(pwd1 and len(pwd1) == 12 and not any(c in "0O1lI" for c in pwd1)))
+
+        user1_client = httpx.Client(base_url=base_url, timeout=15.0)
+        u1_login = auth_login(user1_client, real_user1_email, pwd1)
+        tr.record("Kịch bản 7 (BulkImport)", "Đăng nhập được bằng mật khẩu tạm", u1_login.status_code == 200)
+
+        u1_me = user1_client.get("/auth/me").json()
+        tr.record(
+            "Kịch bản 7 (BulkImport)",
+            "Tài khoản mới có cờ must_change_password=True và vai trò user",
+            u1_me.get("must_change_password") is True and u1_me.get("role") == "user"
+        )
+
+        u1_blocked = user1_client.get("/conversations")
+        tr.record("Kịch bản 7 (BulkImport)", "Tài khoản mới bị chặn 403 trước khi đổi mật khẩu", u1_blocked.status_code == 403)
+
+        # Lấy user id để dọn dẹp và kiểm tra daily_limit từ admin
+        all_users = admin_client.get(f"{base_url}/admin/users").json()
+        target_u1 = next((u for u in all_users if u["email"] == real_user1_email), None)
+        tr.record(
+            "Kịch bản 7 (BulkImport)",
+            "Tài khoản mới có đúng daily_limit=30 trong hệ thống",
+            bool(target_u1 and target_u1.get("daily_limit") == 30)
+        )
+
+        for u in all_users:
+            if u["email"] in (real_user1_email, real_user2_email):
+                users_to_cleanup.append(u["id"])
+
+        # 7.6 Chạy lại cùng file: Toàn bộ dòng chuyển thành exists
+        rerun_resp = admin_client.post(
+            f"{base_url}/admin/users-import",
+            data={"dry_run": "true"},
+            files={"file": ("real_import.xlsx", buf_real.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+        rerun_summary = rerun_resp.json().get("summary", {})
+        tr.record(
+            "Kịch bản 7 (BulkImport)",
+            "Chạy lại cùng file: toàn bộ dòng chuyển thành exists",
+            rerun_summary.get("exists") == 2 and rerun_summary.get("created") == 0
+        )
 
     finally:
         # ==========================================

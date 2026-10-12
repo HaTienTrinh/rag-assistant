@@ -6,6 +6,7 @@ import { toast } from "../ui/toast.js";
 import { showConfirmDialog } from "../ui/dialog.js";
 import { renderSidebar, updateSidebarConversations } from "../ui/sidebar.js";
 import { openDocumentViewer } from "../ui/doc-viewer.js";
+import { openChangePasswordDialog } from "../ui/change-password.js";
 
 let me = null;
 let activeConv = null;
@@ -336,6 +337,16 @@ async function sendQuestion(text) {
 async function initChatPage() {
   me = await requireAuth();
   if (!me) return;
+
+  if (me.must_change_password) {
+    openChangePasswordDialog({
+      forced: true,
+      onSuccess: () => {
+        me.must_change_password = false;
+        handleChatRoute();
+      },
+    });
+  }
 
   // Dựng sidebar dùng chung loại "chat"
   renderSidebar({

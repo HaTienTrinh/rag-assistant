@@ -1,11 +1,13 @@
 import { sendJSON } from "../core/api.js";
-import { setAccessToken } from "../core/auth.js";
+import { setAccessToken, logout } from "../core/auth.js";
 import { el, $ } from "./dom.js";
 import { createSvg } from "./icons.js";
 import { toast } from "./toast.js";
 
 let changePasswordDialog = null;
 let lastTriggerElement = null;
+let isForcedMode = false;
+let forcedOnSuccessCallback = null;
 
 /**
  * Tạo một ô nhập mật khẩu có nút bật/tắt ẩn/hiện mật khẩu
@@ -75,6 +77,17 @@ function ensureDialogCreated() {
     el("div", { id: "change-pw-error-text", class: "alert-text" })
   );
 
+  // 1b. Lời dẫn thông báo khi ở chế độ bắt buộc đổi mật khẩu (forced)
+  const forcedNotice = el("div", {
+    id: "change-pw-forced-notice",
+    class: "alert-banner alert-warning",
+    role: "alert",
+    hidden: true,
+  },
+    el("div", { class: "alert-icon" }, createSvg("alert", 18, 18)),
+    el("div", { class: "alert-text" }, "Đây là lần đăng nhập đầu tiên hoặc mật khẩu vừa được quản trị viên đặt lại. Vui lòng đặt mật khẩu mới.")
+  );
+
   // 2. Các ô nhập mật khẩu
   const currentField = createPasswordField({
     id: "change-pw-current",
@@ -109,9 +122,16 @@ function ensureDialogCreated() {
 
   // 4. Các nút hành động
   const cancelBtn = el("button", {
+    id: "change-pw-cancel-btn",
     type: "button",
     class: "btn btn-outline",
-    onclick: closeChangePasswordDialog,
+    onclick: () => {
+      if (isForcedMode) {
+        logout();
+      } else {
+        closeChangePasswordDialog();
+      }
+    },
   }, "Hủy");
 
   const submitBtn = el("button", {
@@ -123,6 +143,7 @@ function ensureDialogCreated() {
   // 5. Thẻ Form
   const form = el("form", { id: "change-password-form" },
     el("div", { class: "dialog-body" },
+      forcedNotice,
       errorBox,
       currentField,
       newField,
@@ -208,8 +229,19 @@ function ensureDialogCreated() {
         setAccessToken(result.access_token, result.expires_in, false);
       }
 
+      const cb = forcedOnSuccessCallback;
+      // Tắt chế độ forced trước khi đóng modal
+      isForcedMode = false;
+      forcedOnSuccessCallback = null;
+
       // Đóng modal
       closeChangePasswordDialog();
+
+      if (typeof cb === "function") {
+        try {
+          cb();
+        } catch (_) {}
+      }
 
       // Thông báo toast thành công
       toast("Đã đổi mật khẩu. Các thiết bị khác sẽ bị đăng xuất.", "success");
@@ -218,9 +250,21 @@ function ensureDialogCreated() {
       showError(err.message || "Không thể đổi mật khẩu, vui lòng thử lại");
     } finally {
       submitBtn.disabled = false;
-      submitBtn.textContent = "Xác nhận đổi";
+      submitBtn.textContent = isForcedMode ? "Đổi mật khẩu" : "Xác nhận đổi";
     }
   });
+
+  const closeBtn = el("button", {
+    id: "change-pw-close-btn",
+    type: "button",
+    class: "icon-btn dialog-close-btn",
+    "aria-label": "Đóng hộp thoại",
+    onclick: () => {
+      if (!isForcedMode) {
+        closeChangePasswordDialog();
+      }
+    },
+  }, createSvg("close", 18, 18));
 
   // 6. Thẻ Dialog
   changePasswordDialog = el("dialog", {
@@ -234,12 +278,7 @@ function ensureDialogCreated() {
           createSvg("lock", 20, 20),
           el("h3", { id: "change-pw-dialog-title", class: "dialog-title" }, "Đổi mật khẩu")
         ),
-        el("button", {
-          type: "button",
-          class: "icon-btn dialog-close-btn",
-          "aria-label": "Đóng hộp thoại",
-          onclick: closeChangePasswordDialog,
-        }, createSvg("close", 18, 18))
+        closeBtn
       ),
       form
     )
@@ -249,13 +288,15 @@ function ensureDialogCreated() {
   changePasswordDialog.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
-      closeChangePasswordDialog();
+      if (!isForcedMode) {
+        closeChangePasswordDialog();
+      }
       return;
     }
 
     if (e.key === "Tab") {
       const focusableEls = changePasswordDialog.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        'button:not([hidden]):not([style*="display: none"]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (focusableEls.length === 0) return;
 
@@ -276,15 +317,45 @@ function ensureDialogCreated() {
     }
   });
 
+  // Chặn phím Esc tự đóng bởi browser cancel event trên thẻ dialog khi đang ở chế độ forced
+  changePasswordDialog.addEventListener("cancel", (e) => {
+    if (isForcedMode) {
+      e.preventDefault();
+    }
+  });
+
+  // Chặn đóng khi bấm nền nếu đang ở chế độ forced
+  changePasswordDialog.addEventListener("click", (e) => {
+    if (e.target === changePasswordDialog && isForcedMode) {
+      e.stopPropagation();
+    }
+  });
+
   document.body.append(changePasswordDialog);
   return changePasswordDialog;
 }
 
 /**
  * Mở modal Đổi mật khẩu
- * @param {HTMLElement|null} triggerEl - Nút mở để trả focus về khi đóng
+ * Hỗ trợ cả hai chữ ký: openChangePasswordDialog(triggerEl) hoặc openChangePasswordDialog({ forced: true, triggerEl, onSuccess })
+ * @param {HTMLElement|Object|null} triggerElOrOptions - Nút mở hoặc object cấu hình options
+ * @param {Object} maybeOptions - Cấu hình phụ khi đối số 1 là HTMLElement
  */
-export function openChangePasswordDialog(triggerEl = null) {
+export function openChangePasswordDialog(triggerElOrOptions = null, maybeOptions = {}) {
+  let triggerEl = null;
+  let options = {};
+
+  if (triggerElOrOptions instanceof HTMLElement) {
+    triggerEl = triggerElOrOptions;
+    options = maybeOptions || {};
+  } else if (triggerElOrOptions && typeof triggerElOrOptions === "object") {
+    options = triggerElOrOptions;
+    triggerEl = options.triggerEl || null;
+  }
+
+  isForcedMode = Boolean(options.forced);
+  forcedOnSuccessCallback = typeof options.onSuccess === "function" ? options.onSuccess : null;
+
   lastTriggerElement = triggerEl || document.activeElement;
   const dialog = ensureDialogCreated();
 
@@ -295,6 +366,27 @@ export function openChangePasswordDialog(triggerEl = null) {
   const errorBox = $("#change-pw-error-box");
   if (errorBox) errorBox.hidden = true;
 
+  const forcedNotice = $("#change-pw-forced-notice");
+  if (forcedNotice) {
+    forcedNotice.hidden = !isForcedMode;
+  }
+
+  const closeBtn = $("#change-pw-close-btn");
+  if (closeBtn) {
+    closeBtn.hidden = isForcedMode;
+    closeBtn.style.display = isForcedMode ? "none" : "";
+  }
+
+  const cancelBtn = $("#change-pw-cancel-btn");
+  if (cancelBtn) {
+    cancelBtn.textContent = isForcedMode ? "Đăng xuất" : "Hủy";
+  }
+
+  const submitBtn = $("#change-pw-submit-btn");
+  if (submitBtn) {
+    submitBtn.textContent = isForcedMode ? "Đổi mật khẩu" : "Xác nhận đổi";
+  }
+
   // Đặt lại các nút ẩn/hiện password về trạng thái mặc định (password)
   dialog.querySelectorAll(".password-input").forEach((inp) => {
     inp.type = "password";
@@ -303,7 +395,9 @@ export function openChangePasswordDialog(triggerEl = null) {
     btn.replaceChildren(createSvg("eye", 16, 16));
   });
 
-  dialog.showModal();
+  if (!dialog.open) {
+    dialog.showModal();
+  }
 
   // Tự động focus vào ô mật khẩu hiện tại
   setTimeout(() => {
@@ -313,9 +407,10 @@ export function openChangePasswordDialog(triggerEl = null) {
 }
 
 /**
- * Đóng modal Đổi mật khẩu và trả lại focus
+ * Đóng modal Đổi mật khẩu và trả lại focus (không đóng nếu đang ở chế độ forced)
  */
 export function closeChangePasswordDialog() {
+  if (isForcedMode) return;
   if (changePasswordDialog && changePasswordDialog.open) {
     changePasswordDialog.close();
   }

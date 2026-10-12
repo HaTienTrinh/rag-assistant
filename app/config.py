@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     history_messages: int = 8
     daily_question_limit: int = 50
     display_utc_offset_minutes: int = 420  # độ lệch múi giờ hiển thị so với UTC (phút), mặc định 420 = UTC+7 (giờ VN)
+    bulk_import_max_rows: int = 200  # giới hạn số dòng dữ liệu nhập tài khoản hàng loạt
 
     admin_email: str = ""
     admin_password: str = ""

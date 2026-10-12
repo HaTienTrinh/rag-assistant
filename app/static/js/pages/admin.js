@@ -2,9 +2,11 @@ import { requireAdmin } from "../core/auth.js";
 import { api } from "../core/api.js";
 import { $, $$ } from "../ui/dom.js";
 import { renderSidebar, setSidebarActiveTab, updateSidebarBadge } from "../ui/sidebar.js";
+import { openChangePasswordDialog } from "../ui/change-password.js";
 
 import { loadDashboard } from "../admin/dashboard.js?v=ui1";
 import { loadUsers, initUsersEvents } from "../admin/users.js";
+import { initUsersImportEvents } from "../admin/users-import.js";
 import { loadDocuments, stopDocumentsTimer, initDocumentsEvents } from "../admin/documents.js";
 import { loadUnanswered, initUnansweredEvents } from "../admin/unanswered.js";
 
@@ -70,6 +72,17 @@ async function initAdminPage() {
   me = await requireAdmin();
   if (!me) return;
 
+  if (me.must_change_password) {
+    openChangePasswordDialog({
+      forced: true,
+      onSuccess: () => {
+        me.must_change_password = false;
+        handleAdminRoute();
+        syncUnansweredBadge();
+      },
+    });
+  }
+
   // Dựng sidebar dùng chung loại "admin"
   renderSidebar({
     type: "admin",
@@ -78,6 +91,11 @@ async function initAdminPage() {
 
   // Khởi tạo các sự kiện tĩnh của từng trang con
   initUsersEvents(me);
+  initUsersImportEvents({
+    onUsersCreated: async () => {
+      await loadUsers(me);
+    },
+  });
   initDocumentsEvents();
   initUnansweredEvents();
 

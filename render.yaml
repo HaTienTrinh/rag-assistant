@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: rag-assistant
+    runtime: python
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    plan: starter
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 15
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 14
+      - key: REFRESH_REUSE_GRACE_SECONDS
+        value: 10
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: UPLOAD_DIR
+        value: "uploads"
+      - key: MAX_UPLOAD_MB
+        value: "20"
+      - key: EMBEDDING_MODEL
+        value: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+      - key: CHUNK_WORDS
+        value: "60"
+      - key: CHUNK_OVERLAP
+        value: "15"
+      - key: TOP_K
+        value: "8"
+      - key: MIN_SCORE
+        value: "0.25"
+      - key: DEBUG_RAG
+        value: "false"
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: "https://api.deepseek.com"
+      - key: LLM_MODEL
+        value: "deepseek-v4-flash"
+      - key: HISTORY_MESSAGES
+        value: "8"
+      - key: DAILY_QUESTION_LIMIT
+        value: "50"
+      - key: DISPLAY_UTC_OFFSET_MINUTES
+        value: "420"
+      - key: ADMIN_EMAIL
+        value: "admin@example.com"
+      - key: ADMIN_PASSWORD
+        sync: false

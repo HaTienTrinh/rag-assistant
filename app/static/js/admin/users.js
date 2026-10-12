@@ -214,6 +214,13 @@ function createUserRow(u) {
     ? el("span", { class: "pill pill-success" }, "Hoạt động")
     : el("span", { class: "pill pill-danger" }, "Đã khóa");
 
+  const statusWrap = el("div", { class: "status-cell-wrap" }, statusPill);
+  if (u.must_change_password) {
+    statusWrap.append(
+      el("span", { class: "pill pill-warning", title: "Người dùng phải đổi mật khẩu ở lần đăng nhập tiếp theo" }, "Chờ đổi mật khẩu")
+    );
+  }
+
   // Ô hạn mức câu hỏi
   let limitCellContent;
   if (u.role === "admin") {
@@ -317,7 +324,7 @@ function createUserRow(u) {
       )
     ),
     el("td", {}, roleSelect),
-    el("td", {}, statusPill),
+    el("td", {}, statusWrap),
     el("td", {}, limitCellContent),
     el("td", {}, questionsCell),
     el("td", { class: "col-actions" },
@@ -332,8 +339,10 @@ function openResetPasswordDialog(u) {
   const dialog = $("#reset-password-dialog");
   const form = $("#reset-password-form");
   const desc = $("#reset-password-target-desc");
+  const reqChange = $("#reset-password-require-change");
 
   if (form) form.reset();
+  if (reqChange) reqChange.checked = true;
   if (desc) desc.textContent = `Đặt mật khẩu mới cho tài khoản: ${u.email}`;
   openCustomDialog(dialog);
 }
@@ -399,6 +408,8 @@ export function initUsersEvents(currentUser) {
     openCreateBtn.dataset.initialized = "true";
     openCreateBtn.addEventListener("click", () => {
       if (createForm) createForm.reset();
+      const reqChange = $("#create-user-require-change");
+      if (reqChange) reqChange.checked = true;
       openCustomDialog(createDialog, openCreateBtn);
     });
   }
@@ -412,9 +423,11 @@ export function initUsersEvents(currentUser) {
       const role = $("#create-user-role").value;
       const limitVal = $("#create-user-limit").value.trim();
       const daily_limit = limitVal === "" ? null : Number(limitVal);
+      const reqChangeEl = $("#create-user-require-change");
+      const require_change = reqChangeEl ? reqChangeEl.checked : true;
 
       try {
-        await sendJSON("POST", "/admin/users", { email, password, role, daily_limit });
+        await sendJSON("POST", "/admin/users", { email, password, role, daily_limit, require_change });
         closeCustomDialog(createDialog);
         toast("Đã tạo tài khoản thành công", "success");
         await loadUsers();
@@ -434,11 +447,14 @@ export function initUsersEvents(currentUser) {
       e.preventDefault();
       if (!targetUserForReset) return;
       const password = $("#reset-new-password").value;
+      const reqChangeEl = $("#reset-password-require-change");
+      const require_change = reqChangeEl ? reqChangeEl.checked : true;
 
       try {
-        await sendJSON("POST", `/admin/users/${targetUserForReset.id}/reset-password`, { password });
+        await sendJSON("POST", `/admin/users/${targetUserForReset.id}/reset-password`, { password, require_change });
         closeCustomDialog(resetDialog);
         toast("Đã đặt lại mật khẩu thành công", "success");
+        await loadUsers();
       } catch (err) {
         toast(err.message, "error");
       }

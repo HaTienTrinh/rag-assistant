@@ -81,6 +81,11 @@ def admin_page():
     return html_response(STATIC_DIR / "admin.html")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC_DIR / "favicon.ico")
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

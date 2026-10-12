@@ -155,8 +155,12 @@ export async function refreshSession() {
 
 // Đăng xuất khỏi hệ thống: gọi API /auth/logout, dọn bộ nhớ và chuyển về /login
 export async function logout() {
+  const token = getAccessToken();
   try {
-    await fetch("/auth/logout", { method: "POST" });
+    await fetch("/auth/logout", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
   } catch (err) {
     console.warn("Logout request failed:", err);
   } finally {

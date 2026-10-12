@@ -81,10 +81,11 @@ def create_access_token(user_id: int, token_version: int = 0) -> str:
     )
 
 
-def get_current_user(
+def get_current_user_allow_pending(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> User:
-    """Xác thực access token, từ chối nếu hết hạn, tài khoản bị khóa hoặc token_version không khớp."""
+    """Xác thực access token, từ chối nếu hết hạn, tài khoản bị khóa hoặc token_version không khớp.
+    Không chặn người dùng đang có cờ must_change_password (dùng cho /auth/me, /auth/change-password, /auth/logout)."""
     credentials_error = HTTPException(
         status_code=401,
         detail="Token không hợp lệ hoặc đã hết hạn",
@@ -108,8 +109,21 @@ def get_current_user(
     return user
 
 
+def get_current_user(
+    user: User = Depends(get_current_user_allow_pending),
+) -> User:
+    """Dependency nghiêm ngặt: chặn 403 nếu tài khoản cần đổi mật khẩu ở lần đăng nhập đầu tiên."""
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=403,
+            detail="Bạn cần đổi mật khẩu trước khi tiếp tục",
+            headers={"X-Error-Code": "PASSWORD_CHANGE_REQUIRED"},
+        )
+    return user
+
+
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Yêu cầu quyền quản trị viên (admin)."""
+    """Yêu cầu quyền quản trị viên (admin), xây trên dependency nghiêm ngặt get_current_user."""
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Chỉ admin được phép")
     return user

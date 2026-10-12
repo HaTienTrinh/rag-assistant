@@ -1,17 +1,33 @@
 import calendar
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+import logging
+import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from app.auth import (
     hash_password,
     require_admin,
     revoke_all_user_tokens,
     validate_password_rules,
+)
+from app.services.bulk_import import (
+    execute_bulk_import_creation,
+    generate_template_xlsx,
+    parse_and_classify_import_file,
 )
 from app.config import settings
 from app.database import get_db
@@ -34,6 +50,7 @@ class CreateUserBody(BaseModel):
     password: str
     role: str = Field(default="user", pattern="^(admin|user)$")
     daily_limit: int | None = Field(default=None, ge=1, le=100000)
+    require_change: bool = True
 
 
 class UpdateUserBody(BaseModel):
@@ -44,6 +61,7 @@ class UpdateUserBody(BaseModel):
 
 class ResetPasswordBody(BaseModel):
     password: str
+    require_change: bool = True
 
 
 class ResolveBody(BaseModel):
@@ -90,6 +108,7 @@ def _serialize_user(u: User, total: dict, today: dict) -> dict:
         "email": u.email,
         "role": u.role,
         "is_active": u.is_active,
+        "must_change_password": u.must_change_password,
         "daily_limit": u.daily_limit,
         "default_limit": settings.daily_question_limit,
         "effective_limit": None if u.role == "admin" else limit,
@@ -163,6 +182,7 @@ def create_user(
         password_hash=hash_password(body.password),
         role=body.role,
         daily_limit=body.daily_limit,
+        must_change_password=body.require_change,
     )
     db.add(user)
     db.commit()
@@ -218,6 +238,7 @@ def reset_password(
     validate_password_rules(body.password)
     user = _get_user(db, user_id)
     user.password_hash = hash_password(body.password)
+    user.must_change_password = body.require_change
     # Đặt lại mật khẩu -> thu hồi toàn bộ phiên và tăng token_version
     revoke_all_user_tokens(db, user)
     db.commit()
@@ -285,6 +306,92 @@ def permanent_delete_user(
     db.delete(user)
     db.commit()
     return {"deleted": user_id, "message": "Đã xóa vĩnh viễn tài khoản"}
+
+
+# ======================= Nhập người dùng hàng loạt =======================
+
+_bulk_import_lock = threading.Lock()
+logger = logging.getLogger(__name__)
+
+
+@router.get("/users-import/template")
+def download_users_import_template(
+    admin: User = Depends(require_admin),
+):
+    """Tải file Excel mẫu mau-tao-tai-khoan.xlsx."""
+    xlsx_bytes = generate_template_xlsx()
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="mau-tao-tai-khoan.xlsx"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@router.post("/users-import")
+async def import_users(
+    response: Response,
+    file: UploadFile = File(...),
+    dry_run: bool = Form(True),
+    daily_limit: str | None = Form(None),
+    require_password_change: bool = Form(True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Xem trước (dry_run=True) hoặc tạo tài khoản hàng loạt (dry_run=False) từ file Excel/CSV."""
+    parsed_daily_limit: int | None = None
+    if daily_limit is not None and str(daily_limit).strip() != "":
+        try:
+            parsed_daily_limit = int(daily_limit)
+            if parsed_daily_limit < 1 or parsed_daily_limit > 100000:
+                raise HTTPException(400, "Hạn mức câu hỏi/ngày phải từ 1 đến 100.000")
+        except ValueError:
+            raise HTTPException(400, "Hạn mức câu hỏi/ngày phải là số nguyên")
+
+    lock_acquired = False
+    if not dry_run:
+        if not _bulk_import_lock.acquire(blocking=False):
+            raise HTTPException(
+                status_code=409,
+                detail="Đang có đợt nhập khác đang chạy, vui lòng thử lại sau",
+            )
+        lock_acquired = True
+
+    try:
+        content = await file.read()
+        filename = file.filename or ""
+
+        classified_data = parse_and_classify_import_file(
+            filename=filename, content=content, db=db
+        )
+
+        if dry_run:
+            return {
+                "dry_run": True,
+                "total_rows": classified_data["total_rows"],
+                "summary": classified_data["summary"],
+                "rows": classified_data["rows"],
+            }
+
+        # Tạo tài khoản thật
+        result = execute_bulk_import_creation(
+            classified_data=classified_data,
+            daily_limit=parsed_daily_limit,
+            require_password_change=require_password_change,
+            db=db,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        logger.info(
+            "Admin id=%s đã tạo thành công %d tài khoản qua bulk import",
+            admin.id,
+            result["summary"]["created"],
+        )
+        return result
+    finally:
+        if lock_acquired:
+            _bulk_import_lock.release()
 
 
 # ======================= Thống kê =======================

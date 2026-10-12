@@ -14,6 +14,7 @@ from app.auth import (
     clear_refresh_cookie,
     create_access_token,
     get_current_user,
+    get_current_user_allow_pending,
     hash_password,
     hash_token,
     require_admin,
@@ -193,6 +194,7 @@ def logout(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user_allow_pending),
 ):
     """Đăng xuất: thu hồi refresh token hiện tại và xóa cookie trên trình duyệt."""
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
@@ -208,8 +210,13 @@ def logout(
 
 
 @router.get("/me")
-def me(user: User = Depends(get_current_user)):
-    return {"id": user.id, "email": user.email, "role": user.role}
+def me(user: User = Depends(get_current_user_allow_pending)):
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "must_change_password": user.must_change_password,
+    }
 
 
 @router.get("/admin-check")
@@ -223,7 +230,7 @@ def change_password(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_allow_pending),
 ):
     """Người dùng tự đổi mật khẩu cho tài khoản của chính mình."""
     now_ts = time.time()
@@ -265,8 +272,9 @@ def change_password(
             status_code=400, detail="Mật khẩu mới không được trùng mật khẩu hiện tại"
         )
 
-    # Lưu băm mới
+    # Lưu băm mới và xóa cờ bắt buộc đổi mật khẩu
     current_user.password_hash = hash_password(body.new_password)
+    current_user.must_change_password = False
 
     # Thu hồi toàn bộ refresh token và tăng token_version để vô hiệu hóa tất cả thiết bị/phiên khác
     revoke_all_user_tokens(db, current_user)

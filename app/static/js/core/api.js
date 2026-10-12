@@ -1,5 +1,6 @@
 import { getAccessToken, refreshSession, logout } from "./auth.js";
 import { toast } from "../ui/toast.js";
+import { openChangePasswordDialog } from "../ui/change-password.js";
 
 /**
  * Gọi API backend với access token trong bộ nhớ, tự động refresh và gửi lại request nếu gặp 401
@@ -33,6 +34,14 @@ export async function api(path, options = {}) {
       toast("Phiên đăng nhập đã hết hạn", "error");
       logout();
       throw new Error("Phiên đăng nhập đã hết hạn");
+    }
+  }
+
+  // Khi gặp 403 kèm header X-Error-Code: PASSWORD_CHANGE_REQUIRED giữa phiên: hiện modal bắt buộc, không đăng xuất
+  if (res.status === 403) {
+    const errorCode = res.headers.get("x-error-code") || res.headers.get("X-Error-Code");
+    if (errorCode === "PASSWORD_CHANGE_REQUIRED") {
+      openChangePasswordDialog({ forced: true });
     }
   }
 

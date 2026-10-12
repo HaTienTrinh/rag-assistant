@@ -26,6 +26,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="user")  # admin | user
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

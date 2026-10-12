@@ -1267,3 +1267,274 @@
     padding: 14px 16px;
   }
 }
+
+/* ==========================================================================
+   5. Bulk Import Dialog (Tạo tài khoản hàng loạt)
+   ========================================================================== */
+.bulk-import-dialog {
+  max-width: 880px;
+  width: 95vw;
+}
+
+.bulk-import-dialog .dialog-card {
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bulk-import-dialog .dialog-body {
+  overflow-y: auto;
+  max-height: calc(92vh - 145px);
+  padding: 18px 20px;
+}
+
+.bulk-import-stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stepper-step.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stepper-step.completed {
+  color: var(--success-text);
+}
+
+.stepper-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stepper-step.active .stepper-num {
+  background: var(--accent);
+  color: #fff;
+}
+
+.stepper-step.completed .stepper-num {
+  background: var(--success-text);
+  color: #fff;
+}
+
+.stepper-sep {
+  flex: 1;
+  min-width: 16px;
+  max-width: 40px;
+  height: 1px;
+  background: var(--border);
+}
+
+.bulk-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--card-bg);
+  transition: border-color 0.2s, background-color 0.2s;
+  margin-bottom: 16px;
+  outline: none;
+}
+
+.bulk-dropzone:hover,
+.bulk-dropzone:focus-visible,
+.bulk-dropzone.dragover {
+  border-color: var(--accent);
+  background-color: var(--accent-light);
+}
+
+.bulk-dropzone-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.bulk-dropzone-inner svg {
+  color: var(--accent);
+}
+
+.bulk-dropzone-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bulk-dropzone-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.bulk-file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.bulk-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.bulk-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bulk-table-container {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  background: var(--card-bg);
+}
+
+.bulk-table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  text-align: left;
+}
+
+.bulk-table-container th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.bulk-table-container td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.bulk-table-container tr:last-child td {
+  border-bottom: none;
+}
+
+.bulk-table-container tr:hover td {
+  background-color: #FAFCFD;
+}
+
+.bulk-loading-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  margin: 12px 0;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.password-masked-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: monospace;
+}
+
+.password-masked-val {
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  user-select: all;
+}
+
+.password-masked-val.is-masked {
+  letter-spacing: 3px;
+  user-select: none;
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .bulk-import-dialog {
+    width: 98vw;
+    margin: 8px;
+  }
+  .bulk-import-dialog .dialog-body {
+    padding: 14px;
+    max-height: calc(90vh - 120px);
+  }
+  .bulk-options-grid {
+    grid-template-columns: 1fr;
+  }
+}

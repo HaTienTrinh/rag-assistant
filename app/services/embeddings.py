@@ -13,7 +13,7 @@ def _get_model() -> TextEmbedding:
     global _model
     with _lock:
         if _model is None:
-            _model = TextEmbedding(model_name=settings.embedding_model)
+            _model = TextEmbedding(model_name=settings.embedding_model, threads=1)
         return _model
 
 

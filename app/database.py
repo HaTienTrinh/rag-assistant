@@ -1,9 +1,28 @@
+import certifi
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+
+def _build_engine():
+    db_url = settings.database_url
+    connect_args = {}
+
+    # Tự động chuẩn hóa driver sang pymysql nếu URL dùng mysql:// hoặc mysql+mysqldb://
+    if db_url.startswith("mysql://"):
+        db_url = db_url.replace("mysql://", "mysql+pymysql://", 1)
+    elif db_url.startswith("mysql+mysqldb://"):
+        db_url = db_url.replace("mysql+mysqldb://", "mysql+pymysql://", 1)
+
+    # Nếu kết nối tới TiDB Cloud, tự động dùng chứng chỉ gốc CA của certifi
+    if "tidbcloud.com" in db_url:
+        connect_args["ssl"] = {"ca": certifi.where()}
+
+    return create_engine(db_url, connect_args=connect_args, pool_pre_ping=True)
+
+
+engine = _build_engine()
 
 
 @event.listens_for(engine, "connect")

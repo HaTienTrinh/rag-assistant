@@ -11,7 +11,7 @@ from app.services.embeddings import embed_query
 _cached_matrix: np.ndarray | None = None
 _cached_metadata: list[dict] | None = None
 _last_cache_time: float = 0.0
-CACHE_TTL_SECONDS = 30.0  # Tự động đồng bộ lại sau 30 giây nếu có thay đổi ngầm
+CACHE_TTL_SECONDS = 3600.0  # Tự động đồng bộ lại sau 1 giờ nếu có thay đổi ngầm (bình thường đã có invalidate_retrieval_cache)
 
 
 def invalidate_retrieval_cache() -> None:

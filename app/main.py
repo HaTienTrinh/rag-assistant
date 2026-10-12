@@ -35,6 +35,22 @@ def init_db(retries: int = 20, delay: float = 3.0) -> None:
 init_db()
 seed_users()
 
+
+def _warmup_background():
+    """Khởi động trước FastEmbed model và nạp sẵn cache ma trận vector vào RAM để câu hỏi đầu tiên không bị trễ."""
+    try:
+        from app.services.embeddings import _get_model
+        _get_model()
+        with SessionLocal() as db:
+            from app.services.retrieval import search_chunks
+            search_chunks(db, "khởi động")
+    except Exception as exc:
+        print(f"Warmup notice: {exc}")
+
+
+import threading
+threading.Thread(target=_warmup_background, daemon=True).start()
+
 STATIC_DIR = Path(__file__).parent / "static"
 
 

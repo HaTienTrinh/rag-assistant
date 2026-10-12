@@ -2,5 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
-uploads/
 *.sql
+uploads/*
+!uploads/*.pdf
